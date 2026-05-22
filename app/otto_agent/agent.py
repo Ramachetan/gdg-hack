@@ -1,16 +1,11 @@
-"""Otto Roadside — Ford F-150 live multimodal car-repair co-pilot."""
+"""Otto — a live multimodal repair co-pilot for anything iFixit covers."""
 
 import os
 
 from google.adk.agents import Agent
 
 from .prompt import OTTO_INSTRUCTION
-from .tools import (
-    annotate_frame,
-    book_appointment,
-    find_nearest_shop,
-    find_repair_guide,
-)
+from .tools import annotate_frame, find_repair_guide
 
 # Default model: Vertex AI native-audio Live API.
 # Override with DEMO_AGENT_MODEL env var if running against AI Studio
@@ -24,7 +19,5 @@ agent = Agent(
     tools=[
         find_repair_guide,
         annotate_frame,
-        find_nearest_shop,
-        book_appointment,
     ],
 )

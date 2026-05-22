@@ -3,7 +3,6 @@ import type {
   ChatMessage,
   ConnectionState,
   ConsoleEntry,
-  ShopInfo,
 } from "@/lib/types";
 import { base64ToArrayBuffer } from "@/lib/base64";
 import { shortId, userId, sessionId } from "@/lib/id";
@@ -434,26 +433,6 @@ export function useOttoSocket(opts: Options): OttoSocket {
           summary: resp.summary,
           stepsText: resp.steps_text,
           html: resp.html,
-          ts: Date.now(),
-        });
-      } else if (fname === "find_nearest_shop" && resp.status === "ok" && resp.top_pick) {
-        pushMessage({
-          id: shortId(),
-          role: "agent",
-          kind: "shop",
-          topPick: resp.top_pick as ShopInfo,
-          alternates: (resp.alternates || []) as ShopInfo[],
-          ts: Date.now(),
-        });
-      } else if (fname === "book_appointment" && resp.status === "booked") {
-        pushMessage({
-          id: shortId(),
-          role: "agent",
-          kind: "booking",
-          shopName: resp.shop_name,
-          time: resp.time,
-          etaMinutes: resp.eta_minutes,
-          confirmationNumber: resp.confirmation_number,
           ts: Date.now(),
         });
       }

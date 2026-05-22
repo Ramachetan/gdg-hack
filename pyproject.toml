@@ -1,7 +1,7 @@
 [project]
 name = "otto-roadside"
 version = "0.1.0"
-description = "Otto Roadside — live multimodal Ford F-150 repair co-pilot (hackathon)"
+description = "Otto — live multimodal repair co-pilot powered by ADK + Gemini Live + iFixit (hackathon)"
 requires-python = ">=3.10"
 license = { text = "Apache-2.0" }
 authors = [

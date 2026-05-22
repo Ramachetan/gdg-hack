@@ -1,4 +1,4 @@
-"""Otto Roadside agent package."""
+"""Otto — Fix Anything agent package."""
 
 from .agent import agent
 

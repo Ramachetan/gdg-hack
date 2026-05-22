@@ -1,11 +1,7 @@
 """Otto's function tools — invoked by the live agent during conversation.
 
-Status of each tool:
-- find_nearest_shop / book_appointment: mocked for the demo (hardcoded JSON).
-- consult_owners_manual: real keyword index, but returns "no manual loaded" until
-  the user drops F-150 manual files into manual_raw/ and we run the normalizer.
-- annotate_frame: stubbed — needs main.py to stash the latest frame in session
-  state before this can do anything real. Tracked separately.
+- find_repair_guide: hits iFixit's public API for step-by-step repair guides.
+- annotate_frame: draws a labelled box on the latest frame in frame_cache.
 """
 
 from __future__ import annotations
@@ -25,20 +21,22 @@ logger = logging.getLogger(__name__)
 # find_repair_guide  (powered by iFixit's public API)
 # ---------------------------------------------------------------------------
 
-def find_repair_guide(query: str, car_hint: str | None = None) -> dict[str, Any]:
+def find_repair_guide(query: str, device_hint: str | None = None) -> dict[str, Any]:
     """Pull the best-matching repair guide from iFixit's public library.
 
-    Use this for any procedural advice — replacing a battery, checking oil,
-    diagnosing a warning light. Pair the query with what you can see in the
-    camera. iFixit's guides cover most makes and models with step-by-step
-    photos and instructions you can show the user inline.
+    Use this for any procedural advice — replacing a screen, opening a case,
+    swapping a battery, diagnosing an indicator light, fixing a stuck button.
+    Pair the query with what you can see in the camera. iFixit's library spans
+    phones, laptops, tablets, game consoles, appliances, cars, bikes, and more,
+    with step-by-step photos you can show the user inline.
 
     Args:
-        query: The repair or procedure to look up. Be specific: "battery
-            replacement", "oil dipstick", "engine air filter", "brake fluid".
-        car_hint: Optional vehicle context to narrow results. Examples:
-            "2018 Ford F-150", "Honda Civic", "Toyota Camry". If the user
-            hasn't told you the model, omit this.
+        query: The repair or procedure to look up. Be specific: "screen
+            replacement", "battery replacement", "open back cover", "fan
+            cleaning", "engine air filter".
+        device_hint: Optional device context to narrow results. Examples:
+            "iPhone 13", "MacBook Pro 2021", "PS5 Slim", "2018 Ford F-150",
+            "Dyson V8". If the user hasn't told you the model, omit this.
 
     Returns:
         dict with keys:
@@ -52,25 +50,35 @@ def find_repair_guide(query: str, car_hint: str | None = None) -> dict[str, Any]
             html: rendered HTML for the visual-guide panel (frontend renders)
             message: explanation when status != "ok"
     """
-    search_query = f"{car_hint} {query}".strip() if car_hint else query.strip()
-    logger.info("find_repair_guide: query=%r car_hint=%r → %r", query, car_hint, search_query)
+    logger.info("find_repair_guide: query=%r device_hint=%r", query, device_hint)
 
-    guide = ifixit_client.find_best_guide(search_query)
-    if guide is None and car_hint:
-        # Fallback: drop the car hint and try the raw query
-        guide = ifixit_client.find_best_guide(query.strip())
+    # Device-scoped lookup (much more accurate) when the agent provides a hint;
+    # the client falls back to site-wide search internally if nothing matches.
+    guide = ifixit_client.find_best_guide(query.strip(), device_hint=device_hint)
     if guide is None:
         return {
             "status": "no_results",
             "message": (
-                f"iFixit had no repair guide for '{search_query}'. Try a simpler query, "
-                "or describe what you see in the camera without citing a guide."
+                f"iFixit had no repair guide for '{query}'"
+                f"{f' on {device_hint}' if device_hint else ''}. Try a simpler "
+                "query, or describe what you see in the camera without citing a guide."
             ),
         }
 
+    # iFixit guides under a device wiki are often titled bare ("Screen Removal")
+    # because the parent device implies the context. Prepend the category so the
+    # title is unambiguous in the chat bubble — "iPhone 13 — Screen Removal".
+    raw_title = (guide.get("title") or "").strip()
+    category = (guide.get("category") or "").strip()
+    if raw_title and category and category.lower() not in raw_title.lower():
+        display_title = f"{category} — {raw_title}"
+    else:
+        display_title = raw_title or "Repair guide"
+
     return {
         "status": "ok",
-        "title": guide.get("title"),
+        "title": display_title,
+        "matched_device": category or None,
         "url": guide.get("url"),
         "difficulty": guide.get("difficulty"),
         "time_required": guide.get("time_required"),
@@ -187,80 +195,4 @@ def annotate_frame(
         "focus_part": focus_part,
         "instruction": instruction,
         "annotated_image_url": f"/annotations/{annotation_id}.png",
-    }
-
-
-# ---------------------------------------------------------------------------
-# find_nearest_shop  (mocked for demo)
-# ---------------------------------------------------------------------------
-
-_MOCK_SHOPS = [
-    {
-        "shop_id": "joes-garage",
-        "name": "Joe's Garage",
-        "distance_miles": 0.6,
-        "eta_minutes": 8,
-        "rating": 4.7,
-        "hours": "open until 7 PM today",
-        "specialties": ["batteries", "electrical", "general repair"],
-    },
-    {
-        "shop_id": "midtown-auto",
-        "name": "Midtown Auto Service",
-        "distance_miles": 1.4,
-        "eta_minutes": 15,
-        "rating": 4.5,
-        "hours": "open until 6 PM today",
-        "specialties": ["brakes", "alignment", "general repair"],
-    },
-]
-
-
-def find_nearest_shop(symptom: str) -> dict[str, Any]:
-    """Find the nearest open mechanic for the described problem.
-
-    Args:
-        symptom: what the user is dealing with, e.g. "won't start", "warning
-            light on", "weird grinding noise".
-
-    Returns:
-        dict with the top shop and a short list of alternates.
-    """
-    logger.info("find_nearest_shop called: symptom=%r", symptom)
-    return {
-        "status": "ok",
-        "top_pick": _MOCK_SHOPS[0],
-        "alternates": _MOCK_SHOPS[1:],
-        "user_consent_required": True,
-    }
-
-
-# ---------------------------------------------------------------------------
-# book_appointment  (mocked for demo)
-# ---------------------------------------------------------------------------
-
-def book_appointment(shop_id: str, time: str) -> dict[str, Any]:
-    """Book an appointment at a shop returned by ``find_nearest_shop``.
-
-    Only call this after the user has explicitly confirmed they want to book.
-
-    Args:
-        shop_id: id from a previous ``find_nearest_shop`` result.
-        time: requested time, e.g. "11:30 AM today", "as soon as possible".
-
-    Returns:
-        dict with the booking confirmation.
-    """
-    shop = next((s for s in _MOCK_SHOPS if s["shop_id"] == shop_id), None)
-    if shop is None:
-        return {"status": "not_found", "message": f"No shop with id {shop_id}."}
-
-    logger.info("book_appointment booked: shop=%s time=%s", shop_id, time)
-    return {
-        "status": "booked",
-        "confirmation_number": "OTTO-7184",
-        "shop_name": shop["name"],
-        "time": time,
-        "eta_minutes": shop["eta_minutes"],
-        "message": f"Confirmed at {shop['name']} for {time}. They're {shop['eta_minutes']} minutes away.",
     }

@@ -47,7 +47,7 @@ export function TopBar({
         </div>
         <div className="min-w-0">
           <div className="text-sm font-semibold leading-none">Otto</div>
-          <div className="text-[10px] text-zinc-400 mt-0.5">Roadside co-pilot</div>
+          <div className="text-[10px] text-zinc-400 mt-0.5">Fix anything</div>
         </div>
       </div>
 

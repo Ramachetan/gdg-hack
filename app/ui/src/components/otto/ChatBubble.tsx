@@ -5,8 +5,6 @@ import { Card } from "@/components/ui/card";
 import {
   Sparkles,
   User,
-  Wrench,
-  CheckCircle2,
   BookOpen,
   ExternalLink,
   Clock,
@@ -107,59 +105,6 @@ export function ChatBubble({ msg }: { msg: ChatMessage }) {
             {msg.caption}
           </div>
         )}
-      </Bubble>
-    );
-  }
-
-  if (msg.kind === "shop") {
-    return (
-      <Bubble role="agent" className="max-w-[92%] p-0 bg-transparent ring-0 shadow-none">
-        <Card className="border-amber-400/30 bg-zinc-950/85 backdrop-blur p-4 gap-2">
-          <div className="flex items-center gap-2">
-            <div className="grid h-9 w-9 place-items-center rounded-full bg-amber-500/20 text-amber-300">
-              <Wrench className="h-4.5 w-4.5" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold text-zinc-50 truncate">
-                {msg.topPick.name}
-              </div>
-              <div className="text-[11px] text-zinc-400">
-                {msg.topPick.distance_miles} mi · {msg.topPick.eta_minutes} min · {msg.topPick.hours}
-              </div>
-            </div>
-            {typeof msg.topPick.rating === "number" && (
-              <Badge variant="secondary" className="bg-amber-500/15 text-amber-200">
-                ★ {msg.topPick.rating.toFixed(1)}
-              </Badge>
-            )}
-          </div>
-          {msg.alternates.length > 0 && (
-            <div className="text-[11px] text-zinc-500">
-              Also nearby: {msg.alternates.map((a) => a.name).join(", ")}
-            </div>
-          )}
-        </Card>
-      </Bubble>
-    );
-  }
-
-  if (msg.kind === "booking") {
-    return (
-      <Bubble role="agent" className="max-w-[92%] p-0 bg-transparent ring-0 shadow-none">
-        <Card className="border-emerald-400/30 bg-zinc-950/85 backdrop-blur p-4 gap-1.5">
-          <div className="flex items-center gap-2">
-            <CheckCircle2 className="h-5 w-5 text-emerald-400" />
-            <div className="text-sm font-semibold text-zinc-50">
-              Booked — {msg.shopName}
-            </div>
-          </div>
-          <div className="pl-7 text-xs text-zinc-400">
-            {msg.time} · {msg.etaMinutes} min away
-          </div>
-          <div className="pl-7 text-[10px] uppercase tracking-wide text-emerald-300/80">
-            Conf #{msg.confirmationNumber}
-          </div>
-        </Card>
       </Bubble>
     );
   }

@@ -20,20 +20,6 @@ export type ImageMessage = ChatMessageBase & {
   focusPart?: string;
 };
 
-export type ShopMessage = ChatMessageBase & {
-  kind: "shop";
-  topPick: ShopInfo;
-  alternates: ShopInfo[];
-};
-
-export type BookingMessage = ChatMessageBase & {
-  kind: "booking";
-  shopName: string;
-  time: string;
-  etaMinutes: number;
-  confirmationNumber: string;
-};
-
 export type GuideMessage = ChatMessageBase & {
   kind: "guide";
   title: string;
@@ -53,20 +39,8 @@ export type SystemMessage = ChatMessageBase & {
 export type ChatMessage =
   | TextMessage
   | ImageMessage
-  | ShopMessage
-  | BookingMessage
   | GuideMessage
   | SystemMessage;
-
-export type ShopInfo = {
-  shop_id: string;
-  name: string;
-  distance_miles: number;
-  eta_minutes: number;
-  rating?: number;
-  hours?: string;
-  specialties?: string[];
-};
 
 export type ConsoleEntry = {
   id: string;

@@ -17,7 +17,7 @@ export function ChatStream({ messages }: Props) {
           {messages.length === 0 && (
             <div className="mt-3 mx-auto max-w-sm rounded-2xl bg-zinc-900/70 backdrop-blur px-4 py-3 text-center text-xs text-zinc-300 ring-1 ring-white/10">
               <div className="font-medium text-zinc-100 mb-1">Hey, I'm Otto.</div>
-              Tap <span className="text-emerald-300 font-medium">Talk</span> to enable your mic, then <span className="text-primary font-medium">Look</span> to show me your car. I'll walk you through the fix.
+              Tap <span className="text-emerald-300 font-medium">Talk</span> to enable your mic, then <span className="text-primary font-medium">Look</span> to show me what you're fixing. I'll walk you through it.
             </div>
           )}
           {messages.map((m) => (
