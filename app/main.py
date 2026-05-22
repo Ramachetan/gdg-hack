@@ -12,7 +12,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from google.adk.agents.live_request_queue import LiveRequestQueue
-from google.adk.agents.run_config import RunConfig, StreamingMode
+from google.adk.agents.run_config import RunConfig, StreamingMode, ToolThreadPoolConfig
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
 from google.genai import types
@@ -22,7 +22,7 @@ load_dotenv(Path(__file__).parent / ".env")
 
 # Import agent after loading environment variables
 # pylint: disable=wrong-import-position
-from otto_agent.agent import agent  # noqa: E402
+from otto_agent.agent import root_agent  # noqa: E402
 from otto_agent import frame_cache  # noqa: E402
 
 # Configure logging
@@ -57,7 +57,7 @@ if (dist_dir / "assets").exists():
 session_service = InMemorySessionService()
 
 # Define your runner
-runner = Runner(app_name=APP_NAME, agent=agent, session_service=session_service)
+runner = Runner(app_name=APP_NAME, agent=root_agent, session_service=session_service)
 
 # ========================================
 # HTTP Endpoints
@@ -121,8 +121,20 @@ async def websocket_endpoint(
     # ONLY support AUDIO response modality.
     # Half-cascade models support both TEXT and AUDIO,
     # we default to TEXT for better performance.
-    model_name = agent.model
+    model_name = root_agent.model
     is_native_audio = "native-audio" in model_name.lower()
+
+    # Live API caps audio+video sessions hard (2 min on Gemini API, 10 min on
+    # Vertex). Otto streams camera frames continuously, so we enable sliding-
+    # window context compression to lift that cap entirely. Sized for the
+    # 128k-token window of gemini-2.5-flash-native-audio.
+    compression = types.ContextWindowCompressionConfig(
+        trigger_tokens=100000,
+        sliding_window=types.SlidingWindow(target_tokens=80000),
+    )
+    # iFixit calls and PIL drawing block the event loop. Run tools on a worker
+    # pool so audio chunks keep flowing during a tool call.
+    tool_pool = ToolThreadPoolConfig(max_workers=4)
 
     if is_native_audio:
         # Native audio models require AUDIO response modality
@@ -137,6 +149,8 @@ async def websocket_endpoint(
             input_audio_transcription=types.AudioTranscriptionConfig(),
             output_audio_transcription=types.AudioTranscriptionConfig(),
             session_resumption=types.SessionResumptionConfig(),
+            context_window_compression=compression,
+            tool_thread_pool_config=tool_pool,
             proactivity=(
                 types.ProactivityConfig(proactive_audio=True)
                 if proactivity
@@ -161,6 +175,8 @@ async def websocket_endpoint(
             input_audio_transcription=None,
             output_audio_transcription=None,
             session_resumption=types.SessionResumptionConfig(),
+            context_window_compression=compression,
+            tool_thread_pool_config=tool_pool,
         )
         logger.debug(
             f"Half-cascade model detected: {model_name}, "

@@ -9,10 +9,13 @@ from __future__ import annotations
 
 import threading
 import uuid
+from collections import OrderedDict
 
 _lock = threading.Lock()
 _latest_frame_jpeg: bytes | None = None
-_annotations: dict[str, bytes] = {}
+# Bounded LRU so a long session can't balloon memory with annotation PNGs.
+_MAX_ANNOTATIONS = 50
+_annotations: OrderedDict[str, bytes] = OrderedDict()
 
 
 # --- camera frames -------------------------------------------------------------
@@ -36,6 +39,8 @@ def store_annotation(png_bytes: bytes) -> str:
     annotation_id = uuid.uuid4().hex[:12]
     with _lock:
         _annotations[annotation_id] = png_bytes
+        while len(_annotations) > _MAX_ANNOTATIONS:
+            _annotations.popitem(last=False)
     return annotation_id
 
 

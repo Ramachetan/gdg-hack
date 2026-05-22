@@ -12,7 +12,7 @@ from .tools import annotate_frame, find_repair_guide
 # (then use gemini-2.5-flash-native-audio-preview-12-2025).
 _DEFAULT_MODEL = "gemini-live-2.5-flash-native-audio"
 
-agent = Agent(
+root_agent = Agent(
     name="otto",
     model=os.getenv("DEMO_AGENT_MODEL", _DEFAULT_MODEL),
     instruction=OTTO_INSTRUCTION,
