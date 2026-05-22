@@ -6,7 +6,6 @@ __pycache__
 app/.env
 app/server.log
 tests
-uv.lock
 
 # Node deps and built UI artifacts — Dockerfile rebuilds these inside the image
 node_modules

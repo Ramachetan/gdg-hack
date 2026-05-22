@@ -2,7 +2,10 @@
 FROM node:20-slim AS ui-build
 WORKDIR /ui
 COPY app/ui/package.json app/ui/package-lock.json ./
-RUN npm ci
+# `npm install` (not `npm ci`) tolerates lockfile platform skew — the lock is
+# generated on the dev host (often Windows) and omits Linux-only optional
+# deps that `npm ci` strictly demands.
+RUN npm install --no-audit --no-fund
 COPY app/ui ./
 RUN npm run build
 
@@ -17,7 +20,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /workspace
 
-COPY pyproject.toml uv.lock README.md ./
+COPY pyproject.toml uv.lock ./
 COPY app ./app
 
 # Vite is configured to emit to `../static/dist` relative to the ui/ dir,
