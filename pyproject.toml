@@ -1,0 +1,61 @@
+[project]
+name = "otto-roadside"
+version = "0.1.0"
+description = "Otto Roadside — live multimodal Ford F-150 repair co-pilot (hackathon)"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [
+    { name = "Otto hackathon team" },
+]
+
+dependencies = [
+    "google-adk>=1.32.0",
+    "fastapi>=0.115.0",
+    "python-dotenv>=1.0.0",
+    "uvicorn[standard]>=0.32.0",
+    "pillow>=10.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle
+    "F",   # pyflakes
+    "I",   # isort
+    "C",   # flake8-comprehension
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+    "RUF", # ruff specific rules
+]
+ignore = [
+    "E501",    # line length (long prompts, URLs)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app", "otto_agent"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[dependency-groups]
+dev = []
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]

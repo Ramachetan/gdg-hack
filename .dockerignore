@@ -1,0 +1,20 @@
+.git
+.gitignore
+.venv
+__pycache__
+*.pyc
+app/.env
+app/server.log
+tests
+uv.lock
+
+# Node deps and built UI artifacts — Dockerfile rebuilds these inside the image
+node_modules
+app/ui/node_modules
+app/ui/dist
+app/static/dist
+
+# Misc developer-only
+manual_raw
+.agents
+.mcp.json
