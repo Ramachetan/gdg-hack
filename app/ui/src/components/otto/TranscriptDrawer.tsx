@@ -17,7 +17,7 @@ import { Card } from "@/components/ui/card";
 import {
   ChevronUp,
   MessagesSquare,
-  HeartHandshake,
+  ScanEye,
   BookOpen,
   ExternalLink,
   Clock,
@@ -52,7 +52,7 @@ function TextMsg({ msg }: { msg: TextMessage }) {
       {from === "assistant" && (
         <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-zinc-400">
           <span className="grid h-5 w-5 place-items-center rounded-full bg-primary/15 ring-1 ring-primary/30">
-            <HeartHandshake className="h-3 w-3 text-primary" />
+            <ScanEye className="h-3 w-3 text-primary" />
           </span>
           Otto
         </div>
@@ -77,7 +77,7 @@ function ImageMsg({ msg }: { msg: ImageMessage }) {
     <Message from="assistant">
       <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-zinc-400">
         <span className="grid h-5 w-5 place-items-center rounded-full bg-primary/15 ring-1 ring-primary/30">
-          <HeartHandshake className="h-3 w-3 text-primary" />
+          <ScanEye className="h-3 w-3 text-primary" />
         </span>
         Otto · Annotated view
       </div>
@@ -100,7 +100,7 @@ function GuideMsg({ msg }: { msg: GuideMessage }) {
     <Message from="assistant">
       <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-zinc-400">
         <span className="grid h-5 w-5 place-items-center rounded-full bg-primary/15 ring-1 ring-primary/30">
-          <HeartHandshake className="h-3 w-3 text-primary" />
+          <ScanEye className="h-3 w-3 text-primary" />
         </span>
         Otto · Repair guide
       </div>
@@ -229,7 +229,7 @@ export function TranscriptDrawerContent({ messages }: Props) {
           <ConversationContent className="flex flex-col gap-5 px-4 pb-6 pt-2">
             {messages.length === 0 ? (
               <ConversationEmptyState
-                icon={<HeartHandshake className="h-7 w-7 text-primary" />}
+                icon={<ScanEye className="h-7 w-7 text-primary" />}
                 title="Otto is listening"
                 description="Speak naturally, or tap the camera to show him what you're fixing."
                 className="text-zinc-300"

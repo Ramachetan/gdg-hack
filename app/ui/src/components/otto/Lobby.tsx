@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
-  HeartHandshake,
+  ScanEye,
   Phone,
   Mic,
   Video,
@@ -43,7 +43,7 @@ export function Lobby({ connection, onStartCall, starting, permError }: Props) {
           <div className="relative">
             <div className="absolute inset-0 -m-2 rounded-full bg-primary/15 blur-2xl" />
             <div className="relative grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-br from-primary/95 to-primary/70 shadow-[0_18px_50px_-12px_oklch(0.68_0.22_28_/_0.55)] ring-1 ring-white/15 dark:shadow-[0_18px_50px_-12px_oklch(0.68_0.22_28_/_0.7)]">
-              <HeartHandshake className="h-7 w-7 text-primary-foreground" />
+              <ScanEye className="h-7 w-7 text-primary-foreground" />
             </div>
           </div>
           <h1 className="mt-5 text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">

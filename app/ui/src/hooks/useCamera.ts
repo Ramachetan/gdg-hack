@@ -2,6 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { blobToBase64 } from "@/lib/base64";
 
 const LOOK_FPS_MS = 1000;
+// `ideal` is non-binding — phones often return 1080p+ even when we ask for
+// 768. We downscale to this max dimension before JPEG-encoding so payloads
+// stay small (5–25 KB instead of 100–200 KB) and uplink doesn't back up.
+const MAX_FRAME_DIM = 768;
 
 export type CameraHandle = {
   looking: boolean;
@@ -17,7 +21,9 @@ export function useCamera(
 ): CameraHandle {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const intervalRef = useRef<number | null>(null);
+  const timeoutRef = useRef<number | null>(null);
+  const stoppedRef = useRef(true);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [looking, setLooking] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,10 +32,19 @@ export function useCamera(
     if (!video || !video.videoWidth) return;
     if (!isReadyToSend()) return;
 
-    const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    canvas.getContext("2d")?.drawImage(video, 0, 0);
+    const scale = Math.min(
+      1,
+      MAX_FRAME_DIM / Math.max(video.videoWidth, video.videoHeight),
+    );
+    const w = Math.round(video.videoWidth * scale);
+    const h = Math.round(video.videoHeight * scale);
+
+    // Reuse a single canvas across captures to avoid GC pressure on phones.
+    const canvas = canvasRef.current ?? document.createElement("canvas");
+    canvasRef.current = canvas;
+    canvas.width = w;
+    canvas.height = h;
+    canvas.getContext("2d")?.drawImage(video, 0, 0, w, h);
     const blob: Blob | null = await new Promise((resolve) =>
       canvas.toBlob(resolve, "image/jpeg", 0.7),
     );
@@ -38,8 +53,21 @@ export function useCamera(
     sendImage(base64);
   }, [isReadyToSend, sendImage]);
 
+  // Self-rescheduling loop instead of setInterval: prevents overlapping
+  // captures if JPEG encoding stalls on slow phones, and stops cleanly.
+  const scheduleNext = useCallback(
+    (delay: number) => {
+      if (stoppedRef.current) return;
+      timeoutRef.current = window.setTimeout(async () => {
+        await captureFrame();
+        scheduleNext(LOOK_FPS_MS);
+      }, delay);
+    },
+    [captureFrame],
+  );
+
   const start = useCallback(async () => {
-    if (intervalRef.current) return;
+    if (!stoppedRef.current) return;
     setError(null);
     let stream: MediaStream;
     try {
@@ -73,14 +101,16 @@ export function useCamera(
       });
     }
     setLooking(true);
-    captureFrame();
-    intervalRef.current = window.setInterval(captureFrame, LOOK_FPS_MS);
-  }, [captureFrame]);
+    stoppedRef.current = false;
+    void captureFrame();
+    scheduleNext(LOOK_FPS_MS);
+  }, [captureFrame, scheduleNext]);
 
   const stop = useCallback(() => {
-    if (intervalRef.current) {
-      window.clearInterval(intervalRef.current);
-      intervalRef.current = null;
+    stoppedRef.current = true;
+    if (timeoutRef.current) {
+      window.clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
     }
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;

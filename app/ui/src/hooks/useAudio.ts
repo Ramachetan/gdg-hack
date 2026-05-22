@@ -71,8 +71,15 @@ export function useAudio(onPcm: (pcm: ArrayBuffer) => void): AudioHandle {
     // Recorder (16 kHz mic input)
     const recCtx = new AudioContext({ sampleRate: 16000 });
     await recCtx.audioWorklet.addModule(RECORDER_PROCESSOR_URL);
+    // Echo cancellation is critical: speakers play Otto's voice and the mic
+    // is always-on, so without EC the model hears itself and interrupts.
     const micStream = await navigator.mediaDevices.getUserMedia({
-      audio: { channelCount: 1 },
+      audio: {
+        channelCount: 1,
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
     });
     const source = recCtx.createMediaStreamSource(micStream);
     const recNode = new AudioWorkletNode(recCtx, "pcm-recorder-processor");

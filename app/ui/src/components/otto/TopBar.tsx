@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { HeartHandshake, Settings2, Terminal, Moon, Sun, RotateCcw } from "lucide-react";
+import { ScanEye, Settings2, Terminal, Moon, Sun, RotateCcw } from "lucide-react";
 import type { ConnectionState } from "@/lib/types";
 import type { Theme } from "@/lib/theme";
 
@@ -71,7 +71,7 @@ export function TopBar({
       <div className="flex items-center gap-2.5 min-w-0">
         <div className="relative">
           <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-primary/95 to-primary/65 ring-1 ring-white/15 shadow-[0_8px_22px_-8px_oklch(0.68_0.22_28_/_0.6)]">
-            <HeartHandshake className="h-4 w-4 text-primary-foreground" />
+            <ScanEye className="h-4 w-4 text-primary-foreground" />
           </div>
           <span
             className={cn(

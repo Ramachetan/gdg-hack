@@ -213,57 +213,66 @@ async def websocket_endpoint(
             # Receive message from WebSocket (text or binary)
             message = await websocket.receive()
 
-            # Handle binary frames (audio data)
-            if "bytes" in message:
-                audio_data = message["bytes"]
-                logger.debug(
-                    f"Received binary audio chunk: {len(audio_data)} bytes"
-                )
-
-                audio_blob = types.Blob(
-                    mime_type="audio/pcm;rate=16000", data=audio_data
-                )
-                live_request_queue.send_realtime(audio_blob)
-
-            # Handle text frames (JSON messages)
-            elif "text" in message:
-                text_data = message["text"]
-                logger.debug(f"Received text message: {text_data[:100]}...")
-
-                json_message = json.loads(text_data)
-
-                # Extract text from JSON and send to LiveRequestQueue
-                if json_message.get("type") == "text":
+            # One bad payload shouldn't kill the whole session — log and
+            # keep the loop alive. Disconnects re-raise via receive().
+            try:
+                # Handle binary frames (audio data)
+                if "bytes" in message:
+                    audio_data = message["bytes"]
                     logger.debug(
-                        f"Sending text content: {json_message['text']}"
-                    )
-                    content = types.Content(
-                        parts=[types.Part(text=json_message["text"])]
-                    )
-                    live_request_queue.send_content(content)
-
-                # Handle image data
-                elif json_message.get("type") == "image":
-                    logger.debug("Received image data")
-
-                    # Decode base64 image data
-                    image_data = base64.b64decode(json_message["data"])
-                    mime_type = json_message.get("mimeType", "image/jpeg")
-
-                    logger.debug(
-                        f"Sending image: {len(image_data)} bytes, "
-                        f"type: {mime_type}"
+                        f"Received binary audio chunk: {len(audio_data)} bytes"
                     )
 
-                    # Stash for annotate_frame tool to reach later
-                    if mime_type == "image/jpeg":
-                        frame_cache.set_latest_frame(image_data)
-
-                    # Send image as blob
-                    image_blob = types.Blob(
-                        mime_type=mime_type, data=image_data
+                    audio_blob = types.Blob(
+                        mime_type="audio/pcm;rate=16000", data=audio_data
                     )
-                    live_request_queue.send_realtime(image_blob)
+                    live_request_queue.send_realtime(audio_blob)
+
+                # Handle text frames (JSON messages)
+                elif "text" in message:
+                    text_data = message["text"]
+                    logger.debug(f"Received text message: {text_data[:100]}...")
+
+                    json_message = json.loads(text_data)
+
+                    # Extract text from JSON and send to LiveRequestQueue
+                    if json_message.get("type") == "text":
+                        logger.debug(
+                            f"Sending text content: {json_message['text']}"
+                        )
+                        content = types.Content(
+                            parts=[types.Part(text=json_message["text"])]
+                        )
+                        live_request_queue.send_content(content)
+
+                    # Handle image data
+                    elif json_message.get("type") == "image":
+                        logger.debug("Received image data")
+
+                        # Decode base64 image data
+                        image_data = base64.b64decode(json_message["data"])
+                        mime_type = json_message.get("mimeType", "image/jpeg")
+
+                        logger.debug(
+                            f"Sending image: {len(image_data)} bytes, "
+                            f"type: {mime_type}"
+                        )
+
+                        # Stash for annotate_frame tool to reach later
+                        if mime_type == "image/jpeg":
+                            frame_cache.set_latest_frame(image_data)
+
+                        # Send image as blob
+                        image_blob = types.Blob(
+                            mime_type=mime_type, data=image_data
+                        )
+                        live_request_queue.send_realtime(image_blob)
+            except WebSocketDisconnect:
+                raise
+            except Exception as e:
+                logger.warning(
+                    f"Dropping malformed upstream message: {e}", exc_info=True
+                )
 
     async def downstream_task() -> None:
         """Receives Events from run_live() and sends to WebSocket."""

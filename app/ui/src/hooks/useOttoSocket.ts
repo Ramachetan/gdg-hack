@@ -156,9 +156,13 @@ export function useOttoSocket(opts: Options): OttoSocket {
     ws.send(pcm);
   }, []);
 
+  // Drop frames if the WS uplink is congested. At 1 fps, missing one frame
+  // is invisible — letting them queue would add seconds of stale video.
+  const IMAGE_BACKPRESSURE_BYTES = 256 * 1024;
   const sendImage = useCallback((base64: string) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    if (ws.bufferedAmount > IMAGE_BACKPRESSURE_BYTES) return;
     ws.send(JSON.stringify({ type: "image", data: base64, mimeType: "image/jpeg" }));
   }, []);
 
@@ -192,6 +196,16 @@ export function useOttoSocket(opts: Options): OttoSocket {
   useEffect(() => {
     let closedByEffect = false;
     let retryTimer: number | null = null;
+    let retryAttempt = 0;
+
+    function nextRetryDelayMs(): number {
+      // Exponential backoff with jitter, capped at 30s. Prevents hammering
+      // the server during an outage.
+      const base = Math.min(30000, 1000 * Math.pow(2, retryAttempt));
+      const jitter = Math.random() * 0.3 * base;
+      retryAttempt += 1;
+      return base + jitter;
+    }
 
     function connect() {
       const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
@@ -207,6 +221,7 @@ export function useOttoSocket(opts: Options): OttoSocket {
 
       ws.onopen = () => {
         setConnection("connected");
+        retryAttempt = 0;
         pushConsole({
           direction: "incoming",
           emoji: "🔌",
@@ -410,15 +425,24 @@ export function useOttoSocket(opts: Options): OttoSocket {
 
       ws.onclose = () => {
         setConnection("disconnected");
-        pushConsole({
-          direction: "error",
-          emoji: "🔌",
-          author: "system",
-          summary: "WebSocket Disconnected",
-          data: { status: "closed", reconnectIn: "5s" },
-        });
         if (!closedByEffect) {
-          retryTimer = window.setTimeout(connect, 5000);
+          const delay = nextRetryDelayMs();
+          pushConsole({
+            direction: "error",
+            emoji: "🔌",
+            author: "system",
+            summary: "WebSocket Disconnected",
+            data: { status: "closed", reconnectInMs: Math.round(delay), attempt: retryAttempt },
+          });
+          retryTimer = window.setTimeout(connect, delay);
+        } else {
+          pushConsole({
+            direction: "error",
+            emoji: "🔌",
+            author: "system",
+            summary: "WebSocket Disconnected",
+            data: { status: "closed" },
+          });
         }
       };
 
