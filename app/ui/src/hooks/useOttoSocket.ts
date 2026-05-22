@@ -457,7 +457,11 @@ export function useOttoSocket(opts: Options): OttoSocket {
     }
 
     function handleToolResponse(fname: string, resp: any) {
-      if (fname === "annotate_frame" && resp.status === "ok" && resp.annotated_image_url) {
+      if (
+        (fname === "annotate_frame" || fname === "point_at_parts") &&
+        resp.status === "ok" &&
+        resp.annotated_image_url
+      ) {
         pushMessage({
           id: shortId(),
           role: "agent",

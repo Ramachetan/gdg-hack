@@ -2,19 +2,38 @@
 
 - find_repair_guide: hits iFixit's public API for step-by-step repair guides.
 - annotate_frame: draws a labelled box on the latest frame in frame_cache.
+- point_at_parts: asks Gemini 2.5 to pinpoint parts on the latest frame.
 """
 
 from __future__ import annotations
 
 import io
+import json
 import logging
+import os
 from typing import Any
 
+from google import genai
+from google.genai import types as genai_types
 from PIL import Image, ImageDraw, ImageFont
 
 from . import frame_cache, ifixit_client
 
 logger = logging.getLogger(__name__)
+
+# Model used for one-shot vision calls (pointing/segmentation). Separate from
+# the Live model — only 2.5+ supports spatial grounding well.
+_POINTING_MODEL = os.getenv("OTTO_POINTING_MODEL", "gemini-2.5-flash")
+
+_genai_client: genai.Client | None = None
+
+
+def _get_genai_client() -> genai.Client:
+    """Lazily build the genai client so import order doesn't matter for env vars."""
+    global _genai_client
+    if _genai_client is None:
+        _genai_client = genai.Client()
+    return _genai_client
 
 
 # ---------------------------------------------------------------------------
@@ -195,4 +214,210 @@ def annotate_frame(
         "focus_part": focus_part,
         "instruction": instruction,
         "annotated_image_url": f"/annotations/{annotation_id}.png",
+    }
+
+
+# ---------------------------------------------------------------------------
+# point_at_parts
+# ---------------------------------------------------------------------------
+
+_POINTING_PROMPT_TEMPLATE = (
+    "Point to {what} in the image. Find no more than {n} items.\n"
+    "The answer should follow the json format: "
+    '[{{"point": [y, x], "label": <label>}}, ...]. '
+    "The points are in [y, x] format normalized to 0-1000.\n"
+    "If you cannot find what was asked, return an empty JSON array []."
+)
+
+
+def _strip_json_fence(text: str) -> str:
+    """Remove ```json ... ``` fences the model sometimes adds anyway."""
+    text = text.strip()
+    if text.startswith("```"):
+        # Drop first fence line and everything after the closing fence
+        text = text.split("\n", 1)[1] if "\n" in text else ""
+        text = text.split("```", 1)[0]
+    return text.strip()
+
+
+def _draw_point(
+    draw: ImageDraw.ImageDraw,
+    cx: int,
+    cy: int,
+    label: str,
+    *,
+    img_w: int,
+    img_h: int,
+    font: ImageFont.ImageFont,
+) -> None:
+    """Draw a labeled dot at (cx, cy)."""
+    dot_r = max(8, img_w // 120)
+    halo_r = dot_r + max(3, dot_r // 2)
+    # Translucent halo so the dot stays visible on busy backgrounds
+    draw.ellipse(
+        (cx - halo_r, cy - halo_r, cx + halo_r, cy + halo_r),
+        fill=(255, 255, 255, 140),
+    )
+    draw.ellipse(
+        (cx - dot_r, cy - dot_r, cx + dot_r, cy + dot_r),
+        fill=(255, 50, 50, 255),
+        outline=(255, 255, 255, 255),
+        width=2,
+    )
+    if not label:
+        return
+    pad = 6
+    bbox = draw.textbbox((0, 0), label, font=font)
+    tw = bbox[2] - bbox[0]
+    th = bbox[3] - bbox[1]
+    # Prefer label to the right of the dot; flip left if it would overflow
+    lx = cx + dot_r + 6
+    ly = cy - th // 2 - pad
+    if lx + tw + 2 * pad > img_w:
+        lx = cx - dot_r - 6 - tw - 2 * pad
+    lx = max(2, lx)
+    ly = max(2, min(ly, img_h - th - 2 * pad - 2))
+    draw.rectangle(
+        (lx, ly, lx + tw + 2 * pad, ly + th + 2 * pad),
+        fill=(255, 50, 50, 230),
+    )
+    draw.text((lx + pad, ly + pad), label, fill="white", font=font)
+
+
+async def point_at_parts(
+    description: str,
+    max_points: int = 5,
+) -> dict[str, Any]:
+    """Use Gemini 2.5 to locate parts in the user's latest camera frame and
+    draw labeled dots over them.
+
+    Prefer this over `annotate_frame` whenever you need PRECISE pointing — the
+    individual screws holding a panel, a specific connector on a board, the
+    one button the user should press. The dedicated vision model is far more
+    accurate at small, cluttered targets than estimating a box yourself.
+
+    Args:
+        description: Self-contained description of what to point at, written so
+            a separate vision model can find it without other context. Be
+            specific. Good: "the four phillips screws on the corners of the
+            back panel", "the silver SATA data connector on the motherboard",
+            "the orange ribbon cable connecting the screen". Bad: "that one",
+            "the thing we talked about".
+        max_points: Maximum number of dots to draw (1–10). Use 1–2 for a
+            single part, more for "all the screws" cases.
+
+    Returns:
+        dict with status. On ``ok`` includes ``annotated_image_url`` and a
+        ``points`` list of {label, y, x} (normalized 0–1000) the agent can
+        narrate from.
+    """
+    logger.info("point_at_parts: description=%r max_points=%d", description, max_points)
+
+    frame_bytes = frame_cache.get_latest_frame()
+    if frame_bytes is None:
+        return {
+            "status": "no_frame",
+            "message": (
+                "I don't have a camera frame yet. Tell the user to turn on the "
+                "camera (Look mode) and try again."
+            ),
+        }
+
+    max_points = max(1, min(int(max_points), 10))
+    prompt = _POINTING_PROMPT_TEMPLATE.format(what=description.strip(), n=max_points)
+
+    try:
+        client = _get_genai_client()
+        response = await client.aio.models.generate_content(
+            model=_POINTING_MODEL,
+            contents=[
+                genai_types.Part.from_bytes(data=frame_bytes, mime_type="image/jpeg"),
+                prompt,
+            ],
+            config=genai_types.GenerateContentConfig(
+                temperature=0.1,
+                response_mime_type="application/json",
+                # Cookbook explicitly disables thinking for spatial tasks: adds
+                # latency without improving results.
+                thinking_config=genai_types.ThinkingConfig(thinking_budget=0),
+            ),
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("point_at_parts: model call failed: %s", exc)
+        return {
+            "status": "model_error",
+            "message": "Vision model could not respond. Ask the user to try again.",
+        }
+
+    raw = (response.text or "").strip()
+    try:
+        points = json.loads(_strip_json_fence(raw))
+    except json.JSONDecodeError as exc:
+        logger.warning("point_at_parts: bad JSON from model: %s; raw=%r", exc, raw[:300])
+        return {
+            "status": "no_points",
+            "message": "Vision model returned no usable points.",
+        }
+
+    if not isinstance(points, list) or not points:
+        return {
+            "status": "no_points",
+            "message": (
+                f"Could not find {description!r} in the current frame. Ask the "
+                "user to reposition the camera so the part is visible and try again."
+            ),
+        }
+
+    try:
+        img = Image.open(io.BytesIO(frame_bytes)).convert("RGBA")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("point_at_parts: failed to decode frame: %s", exc)
+        return {
+            "status": "decode_error",
+            "message": "Could not decode the camera frame. Ask the user to try again.",
+        }
+
+    w, h = img.size
+    draw = ImageDraw.Draw(img, "RGBA")
+    try:
+        font = ImageFont.truetype("arial.ttf", max(16, w // 50))
+    except OSError:
+        font = ImageFont.load_default()
+
+    drawn = []
+    for item in points[:max_points]:
+        pt = item.get("point") if isinstance(item, dict) else None
+        if not isinstance(pt, list) or len(pt) != 2:
+            continue
+        try:
+            y_norm = float(pt[0])
+            x_norm = float(pt[1])
+        except (TypeError, ValueError):
+            continue
+        # Clamp to 0..1000 then map to pixels
+        cx = int(max(0.0, min(1000.0, x_norm)) / 1000.0 * w)
+        cy = int(max(0.0, min(1000.0, y_norm)) / 1000.0 * h)
+        label = str(item.get("label", "")).strip()[:40]
+        _draw_point(draw, cx, cy, label, img_w=w, img_h=h, font=font)
+        drawn.append({"label": label, "y": y_norm, "x": x_norm})
+
+    if not drawn:
+        return {
+            "status": "no_points",
+            "message": (
+                f"Could not find {description!r} in the current frame. Ask the "
+                "user to reposition the camera so the part is visible and try again."
+            ),
+        }
+
+    buf = io.BytesIO()
+    img.convert("RGB").save(buf, format="PNG", optimize=True)
+    annotation_id = frame_cache.store_annotation(buf.getvalue())
+
+    return {
+        "status": "ok",
+        "focus_part": description,
+        "instruction": drawn[0]["label"] if len(drawn) == 1 else f"{len(drawn)} points",
+        "annotated_image_url": f"/annotations/{annotation_id}.png",
+        "points": drawn,
     }

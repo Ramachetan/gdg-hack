@@ -5,7 +5,7 @@ import os
 from google.adk.agents import Agent
 
 from .prompt import OTTO_INSTRUCTION
-from .tools import annotate_frame, find_repair_guide
+from .tools import annotate_frame, find_repair_guide, point_at_parts
 
 # Default model: Vertex AI native-audio Live API.
 # Override with DEMO_AGENT_MODEL env var if running against AI Studio
@@ -19,5 +19,6 @@ root_agent = Agent(
     tools=[
         find_repair_guide,
         annotate_frame,
+        point_at_parts,
     ],
 )
