@@ -22,7 +22,13 @@
   --border: oklch(0.91 0.01 270);
   --input: oklch(0.91 0.01 270);
   --ring: oklch(0.55 0.22 28);
-  --radius: 0.75rem;
+  --radius: 1rem;
+
+  --orb-core: oklch(0.78 0.18 38);
+  --orb-glow: oklch(0.62 0.22 28 / 0.55);
+  --orb-edge: oklch(0.32 0.08 28 / 0);
+  --glass: oklch(0.98 0.005 95 / 0.7);
+  --glass-border: oklch(0.18 0.02 270 / 0.08);
 }
 
 .dark {
@@ -45,6 +51,12 @@
   --border: oklch(0.28 0.02 270);
   --input: oklch(0.28 0.02 270);
   --ring: oklch(0.68 0.22 28);
+
+  --orb-core: oklch(0.82 0.16 38);
+  --orb-glow: oklch(0.7 0.22 28 / 0.65);
+  --orb-edge: oklch(0.18 0.04 28 / 0);
+  --glass: oklch(0.18 0.02 270 / 0.55);
+  --glass-border: oklch(1 0 0 / 0.08);
 }
 
 @theme inline {
@@ -107,3 +119,42 @@ body {
 }
 .otto-typing-dot:nth-child(2) { animation-delay: 0.2s; }
 .otto-typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+/* Otto orb motion */
+@keyframes otto-orb-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.035); }
+}
+.otto-orb-breathe { animation: otto-orb-breathe 3.6s ease-in-out infinite; }
+
+@keyframes otto-orb-spin { to { transform: rotate(360deg); } }
+.otto-orb-spin { animation: otto-orb-spin 1.6s linear infinite; transform-origin: center; }
+
+@keyframes otto-ripple {
+  0% { transform: scale(1); opacity: 0.55; }
+  100% { transform: scale(1.65); opacity: 0; }
+}
+.otto-ripple-1 { animation: otto-ripple 2.4s ease-out infinite; }
+.otto-ripple-2 { animation: otto-ripple 2.4s ease-out 1.2s infinite; }
+
+/* Lobby call CTA breathing ring */
+@keyframes otto-call-breathe {
+  0%, 100% { box-shadow: 0 0 0 0 oklch(0.68 0.22 28 / 0.45); }
+  50% { box-shadow: 0 0 0 22px oklch(0.68 0.22 28 / 0); }
+}
+.otto-call-breathe { animation: otto-call-breathe 2.4s ease-out infinite; }
+
+/* Frosted glass surface */
+.glass {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+}
+
+/* Disable text-selection callouts on mobile touch UI surfaces */
+.otto-no-select {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}

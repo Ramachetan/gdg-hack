@@ -52,10 +52,12 @@ export type OttoSocket = {
   sendImage: (base64: string) => void;
   clearConsole: () => void;
   isReady: () => boolean;
+  resetSession: () => void;
 };
 
 export function useOttoSocket(opts: Options): OttoSocket {
   const wsRef = useRef<WebSocket | null>(null);
+  const sessionIdRef = useRef<string>(sessionId);
   const [connection, setConnection] = useState<ConnectionState>("connecting");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [consoleLog, setConsoleLog] = useState<ConsoleEntry[]>([]);
@@ -166,6 +168,26 @@ export function useOttoSocket(opts: Options): OttoSocket {
 
   const clearConsole = useCallback(() => setConsoleLog([]), []);
 
+  const resetSession = useCallback(() => {
+    sessionIdRef.current = shortId("demo-session");
+    // Reset turn-state refs so we don't leak partial-bubble state across sessions.
+    currentMsgId.current = null;
+    currentOutputId.current = null;
+    currentInputId.current = null;
+    inputFinished.current = false;
+    hasOutputTranscriptionInTurn.current = false;
+    setMessages([]);
+    pushConsole({
+      direction: "outgoing",
+      emoji: "🔄",
+      author: "system",
+      summary: "New session started",
+      data: { sessionId: sessionIdRef.current },
+    });
+    // Closing the socket triggers ws.onclose → auto-reconnect with the new sessionId.
+    wsRef.current?.close();
+  }, [pushConsole]);
+
   // --- WebSocket connection ---
   useEffect(() => {
     let closedByEffect = false;
@@ -173,7 +195,7 @@ export function useOttoSocket(opts: Options): OttoSocket {
 
     function connect() {
       const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const base = `${wsProto}//${window.location.host}/ws/${userId}/${sessionId}`;
+      const base = `${wsProto}//${window.location.host}/ws/${userId}/${sessionIdRef.current}`;
       const params = new URLSearchParams();
       if (propsRef.current.proactivity) params.append("proactivity", "true");
       if (propsRef.current.affectiveDialog) params.append("affective_dialog", "true");
@@ -190,7 +212,7 @@ export function useOttoSocket(opts: Options): OttoSocket {
           emoji: "🔌",
           author: "system",
           summary: "WebSocket Connected",
-          data: { userId, sessionId, url },
+          data: { userId, sessionId: sessionIdRef.current, url },
         });
       };
 
@@ -476,5 +498,6 @@ export function useOttoSocket(opts: Options): OttoSocket {
     sendImage,
     clearConsole,
     isReady,
+    resetSession,
   };
 }

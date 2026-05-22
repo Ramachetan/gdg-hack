@@ -1,0 +1,246 @@
+import { cn } from "@/lib/utils";
+import {
+  DrawerContent,
+  DrawerTitle,
+  DrawerDescription,
+  DrawerTrigger,
+} from "@/components/ui/drawer";
+import {
+  Conversation,
+  ConversationContent,
+  ConversationEmptyState,
+  ConversationScrollButton,
+} from "@/components/ai-elements/conversation";
+import { Message, MessageContent } from "@/components/ai-elements/message";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import {
+  ChevronUp,
+  MessagesSquare,
+  HeartHandshake,
+  BookOpen,
+  ExternalLink,
+  Clock,
+  Gauge,
+} from "lucide-react";
+import type {
+  ChatMessage,
+  GuideMessage,
+  ImageMessage,
+  SystemMessage,
+  TextMessage,
+} from "@/lib/types";
+
+type Props = {
+  messages: ChatMessage[];
+};
+
+function TypingDots() {
+  return (
+    <span className="inline-flex items-center align-middle ml-1">
+      <span className="otto-typing-dot" />
+      <span className="otto-typing-dot" />
+      <span className="otto-typing-dot" />
+    </span>
+  );
+}
+
+function TextMsg({ msg }: { msg: TextMessage }) {
+  const from = msg.role === "user" ? "user" : "assistant";
+  return (
+    <Message from={from}>
+      {from === "assistant" && (
+        <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-zinc-400">
+          <span className="grid h-5 w-5 place-items-center rounded-full bg-primary/15 ring-1 ring-primary/30">
+            <HeartHandshake className="h-3 w-3 text-primary" />
+          </span>
+          Otto
+        </div>
+      )}
+      <MessageContent
+        className={cn(
+          msg.interrupted && "opacity-60 italic",
+          from === "assistant" && "text-zinc-100",
+        )}
+      >
+        <span className="whitespace-pre-wrap break-words leading-relaxed">
+          {msg.text}
+        </span>
+        {msg.partial && <TypingDots />}
+      </MessageContent>
+    </Message>
+  );
+}
+
+function ImageMsg({ msg }: { msg: ImageMessage }) {
+  return (
+    <Message from="assistant">
+      <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-zinc-400">
+        <span className="grid h-5 w-5 place-items-center rounded-full bg-primary/15 ring-1 ring-primary/30">
+          <HeartHandshake className="h-3 w-3 text-primary" />
+        </span>
+        Otto · Annotated view
+      </div>
+      <div className="overflow-hidden rounded-2xl border border-white/10 bg-zinc-900/60">
+        <img
+          src={msg.url}
+          alt={msg.focusPart || "annotated frame"}
+          className="w-full"
+        />
+        {msg.caption && (
+          <div className="px-3 py-2 text-xs text-zinc-300">{msg.caption}</div>
+        )}
+      </div>
+    </Message>
+  );
+}
+
+function GuideMsg({ msg }: { msg: GuideMessage }) {
+  return (
+    <Message from="assistant">
+      <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-zinc-400">
+        <span className="grid h-5 w-5 place-items-center rounded-full bg-primary/15 ring-1 ring-primary/30">
+          <HeartHandshake className="h-3 w-3 text-primary" />
+        </span>
+        Otto · Repair guide
+      </div>
+      <Card className="border-blue-400/30 bg-zinc-950/85 backdrop-blur p-4 gap-3">
+        <div className="flex items-start gap-2.5">
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-blue-500/20 text-blue-300">
+            <BookOpen className="h-4 w-4" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold text-zinc-50 leading-tight">
+              {msg.title}
+            </div>
+            <div className="mt-1 flex flex-wrap gap-1.5">
+              {msg.difficulty && (
+                <Badge variant="outline" className="border-blue-400/40 text-blue-200 gap-1">
+                  <Gauge className="h-3 w-3" />
+                  {msg.difficulty}
+                </Badge>
+              )}
+              {msg.timeRequired && (
+                <Badge variant="outline" className="border-blue-400/40 text-blue-200 gap-1">
+                  <Clock className="h-3 w-3" />
+                  {msg.timeRequired}
+                </Badge>
+              )}
+            </div>
+          </div>
+        </div>
+        {msg.summary && (
+          <div className="text-xs text-zinc-400 leading-relaxed">{msg.summary}</div>
+        )}
+        {msg.stepsText && msg.stepsText.length > 0 && (
+          <ol className="space-y-1.5 text-xs text-zinc-300">
+            {msg.stepsText.map((step, i) => (
+              <li key={i} className="flex gap-2">
+                <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-blue-500/25 text-[10px] font-bold text-blue-200">
+                  {i + 1}
+                </span>
+                <span className="leading-relaxed">{step}</span>
+              </li>
+            ))}
+          </ol>
+        )}
+        {msg.url && (
+          <a
+            href={msg.url}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 text-[11px] text-blue-300 hover:text-blue-200"
+          >
+            Full guide on iFixit <ExternalLink className="h-3 w-3" />
+          </a>
+        )}
+      </Card>
+    </Message>
+  );
+}
+
+function SystemMsg({ msg }: { msg: SystemMessage }) {
+  return (
+    <div className="flex justify-center">
+      <span className="rounded-full bg-white/5 px-3 py-1 text-[11px] text-zinc-400 ring-1 ring-white/10">
+        {msg.text}
+      </span>
+    </div>
+  );
+}
+
+function Bubble({ msg }: { msg: ChatMessage }) {
+  switch (msg.kind) {
+    case "text":
+      return <TextMsg msg={msg} />;
+    case "image":
+      return <ImageMsg msg={msg} />;
+    case "guide":
+      return <GuideMsg msg={msg} />;
+    case "system":
+      return <SystemMsg msg={msg} />;
+  }
+}
+
+export function TranscriptHandle({
+  count,
+  partial,
+  className,
+}: {
+  count: number;
+  partial: boolean;
+  className?: string;
+}) {
+  return (
+    <DrawerTrigger asChild>
+      <button
+        type="button"
+        className={cn(
+          "group inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[11px] font-medium glass text-zinc-100 otto-no-select",
+          "active:scale-[0.97] transition",
+          className,
+        )}
+        aria-label="Open transcript"
+      >
+        <MessagesSquare className="h-3.5 w-3.5 opacity-80" />
+        <span>
+          Transcript{count > 0 ? ` · ${count}` : ""}
+          {partial && <TypingDots />}
+        </span>
+        <ChevronUp className="h-3 w-3 opacity-70 transition group-hover:-translate-y-0.5" />
+      </button>
+    </DrawerTrigger>
+  );
+}
+
+export function TranscriptDrawerContent({ messages }: Props) {
+  return (
+    <DrawerContent className="border-white/10 bg-zinc-950/95 text-zinc-100 max-h-[85vh]">
+      <div className="px-4 pt-2 pb-1 text-center">
+        <DrawerTitle className="text-sm font-semibold text-zinc-50">
+          Transcript
+        </DrawerTitle>
+        <DrawerDescription className="text-[11px] text-zinc-400">
+          Your conversation with Otto
+        </DrawerDescription>
+      </div>
+      <div className="relative flex-1 min-h-0">
+        <Conversation className="h-[calc(85vh-72px)]">
+          <ConversationContent className="flex flex-col gap-5 px-4 pb-6 pt-2">
+            {messages.length === 0 ? (
+              <ConversationEmptyState
+                icon={<HeartHandshake className="h-7 w-7 text-primary" />}
+                title="Otto is listening"
+                description="Speak naturally, or tap the camera to show him what you're fixing."
+                className="text-zinc-300"
+              />
+            ) : (
+              messages.map((m) => <Bubble key={m.id} msg={m} />)
+            )}
+          </ConversationContent>
+          <ConversationScrollButton className="bg-zinc-900/80 hover:bg-zinc-800 border-white/10" />
+        </Conversation>
+      </div>
+    </DrawerContent>
+  );
+}

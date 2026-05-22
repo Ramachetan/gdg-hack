@@ -10,8 +10,9 @@ import {
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { Sparkles, Settings2, Terminal } from "lucide-react";
+import { HeartHandshake, Settings2, Terminal, Moon, Sun, RotateCcw } from "lucide-react";
 import type { ConnectionState } from "@/lib/types";
+import type { Theme } from "@/lib/theme";
 
 type Props = {
   connection: ConnectionState;
@@ -20,12 +21,18 @@ type Props = {
   onProactivity: (v: boolean) => void;
   onAffectiveDialog: (v: boolean) => void;
   onOpenConsole: () => void;
+  compact?: boolean;
+  theme: Theme;
+  onTheme: (t: Theme) => void;
+  inCall?: boolean;
+  onNewChat?: () => void;
+  canNewChat?: boolean;
 };
 
-const STATE_LABEL: Record<ConnectionState, string> = {
-  connecting: "Connecting…",
-  connected: "Live",
-  disconnected: "Disconnected",
+const DOT_CLASS: Record<ConnectionState, string> = {
+  connected: "hidden",
+  connecting: "bg-amber-400",
+  disconnected: "bg-rose-400",
 };
 
 export function TopBar({
@@ -35,87 +42,140 @@ export function TopBar({
   onProactivity,
   onAffectiveDialog,
   onOpenConsole,
+  compact,
+  theme,
+  onTheme,
+  inCall,
+  onNewChat,
+  canNewChat,
 }: Props) {
+  const iconBtnClass = cn(
+    "h-9 w-9 rounded-full ring-1",
+    inCall
+      ? "bg-white/[0.04] text-zinc-200 hover:bg-white/10 hover:text-white ring-white/10"
+      : "bg-zinc-900/[0.04] text-zinc-700 hover:bg-zinc-900/10 ring-zinc-900/10 dark:bg-white/[0.04] dark:text-zinc-200 dark:hover:bg-white/10 dark:hover:text-white dark:ring-white/10",
+  );
   return (
     <header
-      className="absolute inset-x-0 top-0 z-30 flex items-center justify-between gap-2 px-3 pb-2 backdrop-blur-md bg-gradient-to-b from-black/55 via-black/40 to-transparent text-zinc-50"
-      style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 0.6rem)" }}
+      className={cn(
+        "absolute inset-x-0 top-0 z-30 flex items-center justify-between gap-2 px-3 pb-3",
+        "text-zinc-900 dark:text-zinc-50",
+        // Lobby: theme-aware faint gradient
+        compact && "bg-gradient-to-b from-zinc-50/30 to-transparent dark:from-black/40 dark:via-black/15 backdrop-blur-[2px]",
+        // In-call: always darker gradient regardless of theme
+        inCall && "bg-gradient-to-b from-black/40 via-black/15 to-transparent backdrop-blur-[6px] text-zinc-50",
+        !compact && !inCall && "bg-gradient-to-b from-zinc-50/40 to-transparent dark:from-black/40 dark:via-black/15 backdrop-blur-[6px]",
+      )}
+      style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 0.75rem)" }}
     >
-      <div className="flex items-center gap-2 min-w-0">
-        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-primary/20 ring-1 ring-primary/40">
-          <Sparkles className="h-4.5 w-4.5 text-primary" />
+      <div className="flex items-center gap-2.5 min-w-0">
+        <div className="relative">
+          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-primary/95 to-primary/65 ring-1 ring-white/15 shadow-[0_8px_22px_-8px_oklch(0.68_0.22_28_/_0.6)]">
+            <HeartHandshake className="h-4 w-4 text-primary-foreground" />
+          </div>
+          <span
+            className={cn(
+              "absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2",
+              inCall ? "ring-zinc-950" : "ring-white dark:ring-zinc-950",
+              DOT_CLASS[connection],
+            )}
+            aria-label={`Status: ${connection}`}
+          />
         </div>
         <div className="min-w-0">
-          <div className="text-sm font-semibold leading-none">Otto</div>
-          <div className="text-[10px] text-zinc-400 mt-0.5">Fix anything</div>
+          <div className="text-[15px] font-semibold leading-none tracking-tight">Otto</div>
+          <div className={cn(
+            "text-[10px] mt-1 uppercase tracking-[0.16em]",
+            inCall ? "text-zinc-400" : "text-zinc-500 dark:text-zinc-400",
+          )}>
+            Live repair co-pilot
+          </div>
         </div>
       </div>
 
       <div className="flex items-center gap-1.5">
-        <div
-          className={cn(
-            "flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-medium ring-1",
-            connection === "connected"
-              ? "bg-emerald-500/15 text-emerald-300 ring-emerald-400/30"
-              : connection === "connecting"
-                ? "bg-amber-500/15 text-amber-300 ring-amber-400/30"
-                : "bg-rose-500/15 text-rose-300 ring-rose-400/30",
-          )}
-        >
-          <span
-            className={cn(
-              "h-1.5 w-1.5 rounded-full",
-              connection === "connected" && "bg-emerald-400 otto-pulse",
-              connection === "connecting" && "bg-amber-400 otto-pulse",
-              connection === "disconnected" && "bg-rose-400",
-            )}
-          />
-          {STATE_LABEL[connection]}
-        </div>
+        {inCall && onNewChat && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className={iconBtnClass}
+            onClick={onNewChat}
+            disabled={!canNewChat}
+            aria-label="Start a new chat"
+            title="New chat"
+          >
+            <RotateCcw className="h-4 w-4" />
+          </Button>
+        )}
 
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-9 w-9 rounded-full bg-white/5 text-zinc-200 hover:bg-white/10 hover:text-white"
-          onClick={onOpenConsole}
-          aria-label="Open event console"
-        >
-          <Terminal className="h-4 w-4" />
-        </Button>
+        {!compact && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className={iconBtnClass}
+            onClick={onOpenConsole}
+            aria-label="Open event console"
+          >
+            <Terminal className="h-4 w-4" />
+          </Button>
+        )}
 
         <Sheet>
           <SheetTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
-              className="h-9 w-9 rounded-full bg-white/5 text-zinc-200 hover:bg-white/10 hover:text-white"
+              className={iconBtnClass}
               aria-label="Settings"
             >
               <Settings2 className="h-4 w-4" />
             </Button>
           </SheetTrigger>
-          <SheetContent side="right" className="bg-zinc-950/95 text-zinc-50 border-zinc-800">
+          <SheetContent
+            side="right"
+            className="bg-background text-foreground border-border"
+          >
             <SheetHeader>
-              <SheetTitle className="text-zinc-50">Otto settings</SheetTitle>
-              <SheetDescription className="text-zinc-400">
-                Live model controls — only apply to native-audio models.
+              <SheetTitle>Otto settings</SheetTitle>
+              <SheetDescription>
+                Tune the experience and Otto's behavior.
               </SheetDescription>
             </SheetHeader>
             <div className="px-4 py-2 space-y-4">
               <div className="flex items-start justify-between gap-3">
                 <div>
+                  <div className="text-sm font-medium flex items-center gap-1.5">
+                    {theme === "dark" ? (
+                      <Moon className="h-3.5 w-3.5 text-primary" />
+                    ) : (
+                      <Sun className="h-3.5 w-3.5 text-primary" />
+                    )}
+                    Dark mode
+                  </div>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Switch between light and dark surfaces.
+                  </p>
+                </div>
+                <Switch
+                  checked={theme === "dark"}
+                  onCheckedChange={(v) => onTheme(v ? "dark" : "light")}
+                />
+              </div>
+              <Separator />
+              <div className="flex items-start justify-between gap-3">
+                <div>
                   <div className="text-sm font-medium">Proactivity</div>
-                  <p className="mt-0.5 text-xs text-zinc-400">
+                  <p className="mt-0.5 text-xs text-muted-foreground">
                     Let Otto speak up without being asked.
                   </p>
                 </div>
                 <Switch checked={proactivity} onCheckedChange={onProactivity} />
               </div>
-              <Separator className="bg-zinc-800" />
+              <Separator />
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <div className="text-sm font-medium">Affective dialog</div>
-                  <p className="mt-0.5 text-xs text-zinc-400">
+                  <p className="mt-0.5 text-xs text-muted-foreground">
                     Adapt tone to how the user sounds.
                   </p>
                 </div>
