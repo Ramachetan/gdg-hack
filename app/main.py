@@ -230,8 +230,18 @@ async def websocket_endpoint(
         """Receives messages from WebSocket and sends to LiveRequestQueue."""
         logger.debug("upstream_task started")
         while True:
-            # Receive message from WebSocket (text or binary)
-            message = await websocket.receive()
+            # Receive message from WebSocket (text or binary).
+            # Starlette raises a plain RuntimeError ("Cannot call 'receive' once
+            # a disconnect message has been received.") on the iteration AFTER
+            # the client disconnects — translate it into a clean
+            # WebSocketDisconnect so it shows up as a normal close, not an
+            # unhandled ERROR in Cloud Run logs.
+            try:
+                message = await websocket.receive()
+            except RuntimeError as exc:
+                if "disconnect message" in str(exc):
+                    raise WebSocketDisconnect() from None
+                raise
 
             # One bad payload shouldn't kill the whole session — log and
             # keep the loop alive. Disconnects re-raise via receive().

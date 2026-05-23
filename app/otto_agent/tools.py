@@ -159,6 +159,22 @@ def annotate_frame(
             "message": "box must be [x1, y1, x2, y2] with each value between 0 and 1.",
         }
 
+    # Reject whole-frame "highlights" — the agent sometimes calls annotate_frame
+    # with a box covering ~the entire image to "show what it sees", which just
+    # pops a full-screen still image at the user without actually pointing at
+    # anything specific. Pointing at a whole device is a no-op for the user.
+    x1, y1, x2, y2 = box
+    area_frac = max(0.0, (x2 - x1)) * max(0.0, (y2 - y1))
+    if area_frac > 0.65:
+        return {
+            "status": "too_broad",
+            "message": (
+                "The bounding box covers most of the frame, which isn't useful "
+                "as a highlight. Either call `point_at_parts` to pin a specific "
+                "feature, or just describe what you see in words for this turn."
+            ),
+        }
+
     try:
         img = Image.open(io.BytesIO(frame_bytes)).convert("RGB")
     except Exception as exc:  # noqa: BLE001
@@ -223,10 +239,13 @@ def annotate_frame(
 # ---------------------------------------------------------------------------
 
 _POINTING_PROMPT_TEMPLATE = (
-    "Detect {what} in the image. Return no more than {n} items.\n"
-    "The answer should follow the json format: "
-    '[{{"box_2d": [ymin, xmin, ymax, xmax], "label": <label>}}, ...]. '
-    "Box coordinates are normalized to 0-1000 of image height (y) and width (x).\n"
+    "Detect: {what}\n"
+    "Return bounding boxes as a JSON array with labels. Never return masks, "
+    "explanations, or code fencing. Limit to {n} items. "
+    "If an object is present multiple times, name each by a unique characteristic "
+    '(e.g. "top-left screw", "rightmost orange cable").\n'
+    'Format each entry exactly as {{"box_2d": [ymin, xmin, ymax, xmax], "label": <label>}}, '
+    "where box_2d coordinates are normalized to 0-1000 of image height (y) and width (x).\n"
     "Make each box tight to the part — just big enough to enclose it.\n"
     "If you cannot find what was asked, return an empty JSON array []."
 )
@@ -242,7 +261,7 @@ def _strip_json_fence(text: str) -> str:
     return text.strip()
 
 
-async def point_at_parts(
+def point_at_parts(
     description: str,
     max_items: int = 5,
 ) -> dict[str, Any]:
@@ -269,6 +288,15 @@ async def point_at_parts(
         ``{label, ymin, xmin, ymax, xmax}`` with coords normalized 0–1000 of
         image height/width, which the agent can narrate from.
     """
+    # NOTE: defined as a SYNC function on purpose. ADK runs async tools by
+    # spawning `asyncio.run(...)` in a worker thread for each call, which
+    # creates and tears down a fresh event loop every time. `genai.Client().aio`
+    # caches an httpx AsyncClient bound to the first such loop; on the next
+    # call that loop is closed and every call raises
+    # `RuntimeError: Event loop is closed`. The sync genai API has no event-
+    # loop binding and the ADK sync-tool path dispatches us via
+    # `loop.run_in_executor` (see ToolThreadPoolConfig in app/main.py), so the
+    # main audio loop still keeps streaming during the call.
     logger.info("point_at_parts: description=%r max_items=%d", description, max_items)
 
     frame_bytes = frame_cache.get_latest_frame()
@@ -286,7 +314,7 @@ async def point_at_parts(
 
     try:
         client = _get_genai_client()
-        response = await client.aio.models.generate_content(
+        response = client.models.generate_content(
             model=_POINTING_MODEL,
             contents=[
                 genai_types.Part.from_bytes(data=frame_bytes, mime_type="image/jpeg"),

@@ -22,8 +22,12 @@ import { Square, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { BoxesMessage, ImageMessage } from "@/lib/types";
 
-const SPOTLIGHT_MS = 6000;
-const BOXES_MS = 3500;
+// Annotated still image from annotate_frame — shown in a corner card, not
+// fullscreen, so the live camera keeps streaming behind it.
+const SPOTLIGHT_MS = 4500;
+// Live boxes from point_at_parts drift relative to the moving video after
+// the source frame ages. Keep them brief.
+const BOXES_MS = 2200;
 
 type Phase = "lobby" | "in-call";
 
@@ -367,38 +371,42 @@ function Spotlight({
   visible: boolean;
   onDismiss: () => void;
 }) {
+  // Small floating card in the top-right, not fullscreen. The live camera
+  // keeps streaming behind it so the screen never feels "frozen" mid-call.
   const label = msg.caption || msg.focusPart;
   return (
     <div
       className={cn(
-        "absolute inset-0 z-20 transition-opacity duration-300",
-        visible ? "opacity-100" : "opacity-0 pointer-events-none",
+        "pointer-events-none absolute z-20 transition-all duration-300",
+        visible ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-2",
       )}
+      style={{
+        top: "calc(env(safe-area-inset-top, 0px) + 4.25rem)",
+        right: "0.75rem",
+        width: "min(40vw, 16rem)",
+      }}
       aria-hidden={!visible}
     >
-      <img
-        src={msg.url}
-        alt={msg.focusPart || "annotated frame"}
-        className="absolute inset-0 h-full w-full object-cover"
-      />
-      <button
-        type="button"
-        onClick={onDismiss}
-        aria-label="Dismiss annotation"
-        className="absolute right-3 top-3 z-30 grid h-9 w-9 place-items-center rounded-full bg-black/55 text-white ring-1 ring-white/20 backdrop-blur hover:bg-black/75 active:scale-95 transition"
-      >
-        <X className="h-4 w-4" />
-      </button>
-      {label && (
-        <div
-          className="pointer-events-none absolute inset-x-0 z-20 flex justify-center px-4"
-          style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 14rem)" }}
+      <div className="pointer-events-auto relative overflow-hidden rounded-2xl bg-black/55 ring-1 ring-white/20 shadow-[0_20px_60px_-20px_oklch(0_0_0_/_0.7)] backdrop-blur">
+        <img
+          src={msg.url}
+          alt={msg.focusPart || "annotated frame"}
+          className="block h-auto w-full object-cover"
+        />
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label="Dismiss annotation"
+          className="absolute right-1.5 top-1.5 grid h-7 w-7 place-items-center rounded-full bg-black/60 text-white ring-1 ring-white/20 backdrop-blur hover:bg-black/80 active:scale-95 transition"
         >
-          <div className="max-w-md rounded-2xl bg-black/70 px-4 py-2 text-center text-sm font-medium text-white shadow-lg ring-1 ring-white/15 backdrop-blur">
+          <X className="h-3.5 w-3.5" />
+        </button>
+        {label && (
+          <div className="px-2.5 py-1.5 text-[11px] font-medium leading-tight text-white">
             {label}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
