@@ -20,6 +20,21 @@ export type ImageMessage = ChatMessageBase & {
   focusPart?: string;
 };
 
+export type BoundingBox = {
+  label: string;
+  ymin: number;
+  xmin: number;
+  ymax: number;
+  xmax: number;
+};
+
+export type BoxesMessage = ChatMessageBase & {
+  kind: "boxes";
+  boxes: BoundingBox[];
+  focusPart?: string;
+  instruction?: string;
+};
+
 export type GuideMessage = ChatMessageBase & {
   kind: "guide";
   title: string;
@@ -39,6 +54,7 @@ export type SystemMessage = ChatMessageBase & {
 export type ChatMessage =
   | TextMessage
   | ImageMessage
+  | BoxesMessage
   | GuideMessage
   | SystemMessage;
 

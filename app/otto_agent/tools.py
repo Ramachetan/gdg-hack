@@ -2,7 +2,8 @@
 
 - find_repair_guide: hits iFixit's public API for step-by-step repair guides.
 - annotate_frame: draws a labelled box on the latest frame in frame_cache.
-- point_at_parts: asks Gemini 2.5 to pinpoint parts on the latest frame.
+- point_at_parts: asks Gemini 2.5 to detect parts on the latest frame and
+  returns bounding boxes the UI overlays over the live camera.
 """
 
 from __future__ import annotations
@@ -222,10 +223,11 @@ def annotate_frame(
 # ---------------------------------------------------------------------------
 
 _POINTING_PROMPT_TEMPLATE = (
-    "Point to {what} in the image. Find no more than {n} items.\n"
+    "Detect {what} in the image. Return no more than {n} items.\n"
     "The answer should follow the json format: "
-    '[{{"point": [y, x], "label": <label>}}, ...]. '
-    "The points are in [y, x] format normalized to 0-1000.\n"
+    '[{{"box_2d": [ymin, xmin, ymax, xmax], "label": <label>}}, ...]. '
+    "Box coordinates are normalized to 0-1000 of image height (y) and width (x).\n"
+    "Make each box tight to the part — just big enough to enclose it.\n"
     "If you cannot find what was asked, return an empty JSON array []."
 )
 
@@ -240,56 +242,12 @@ def _strip_json_fence(text: str) -> str:
     return text.strip()
 
 
-def _draw_point(
-    draw: ImageDraw.ImageDraw,
-    cx: int,
-    cy: int,
-    label: str,
-    *,
-    img_w: int,
-    img_h: int,
-    font: ImageFont.ImageFont,
-) -> None:
-    """Draw a labeled dot at (cx, cy)."""
-    dot_r = max(8, img_w // 120)
-    halo_r = dot_r + max(3, dot_r // 2)
-    # Translucent halo so the dot stays visible on busy backgrounds
-    draw.ellipse(
-        (cx - halo_r, cy - halo_r, cx + halo_r, cy + halo_r),
-        fill=(255, 255, 255, 140),
-    )
-    draw.ellipse(
-        (cx - dot_r, cy - dot_r, cx + dot_r, cy + dot_r),
-        fill=(255, 50, 50, 255),
-        outline=(255, 255, 255, 255),
-        width=2,
-    )
-    if not label:
-        return
-    pad = 6
-    bbox = draw.textbbox((0, 0), label, font=font)
-    tw = bbox[2] - bbox[0]
-    th = bbox[3] - bbox[1]
-    # Prefer label to the right of the dot; flip left if it would overflow
-    lx = cx + dot_r + 6
-    ly = cy - th // 2 - pad
-    if lx + tw + 2 * pad > img_w:
-        lx = cx - dot_r - 6 - tw - 2 * pad
-    lx = max(2, lx)
-    ly = max(2, min(ly, img_h - th - 2 * pad - 2))
-    draw.rectangle(
-        (lx, ly, lx + tw + 2 * pad, ly + th + 2 * pad),
-        fill=(255, 50, 50, 230),
-    )
-    draw.text((lx + pad, ly + pad), label, fill="white", font=font)
-
-
 async def point_at_parts(
     description: str,
-    max_points: int = 5,
+    max_items: int = 5,
 ) -> dict[str, Any]:
-    """Use Gemini 2.5 to locate parts in the user's latest camera frame and
-    draw labeled dots over them.
+    """Use Gemini 2.5 to detect parts in the user's latest camera frame and
+    return labeled bounding boxes the UI overlays on the live feed.
 
     Prefer this over `annotate_frame` whenever you need PRECISE pointing — the
     individual screws holding a panel, a specific connector on a board, the
@@ -303,15 +261,15 @@ async def point_at_parts(
             back panel", "the silver SATA data connector on the motherboard",
             "the orange ribbon cable connecting the screen". Bad: "that one",
             "the thing we talked about".
-        max_points: Maximum number of dots to draw (1–10). Use 1–2 for a
+        max_items: Maximum number of boxes to draw (1–10). Use 1–2 for a
             single part, more for "all the screws" cases.
 
     Returns:
-        dict with status. On ``ok`` includes ``annotated_image_url`` and a
-        ``points`` list of {label, y, x} (normalized 0–1000) the agent can
-        narrate from.
+        dict with status. On ``ok`` includes ``boxes`` — a list of
+        ``{label, ymin, xmin, ymax, xmax}`` with coords normalized 0–1000 of
+        image height/width, which the agent can narrate from.
     """
-    logger.info("point_at_parts: description=%r max_points=%d", description, max_points)
+    logger.info("point_at_parts: description=%r max_items=%d", description, max_items)
 
     frame_bytes = frame_cache.get_latest_frame()
     if frame_bytes is None:
@@ -323,8 +281,8 @@ async def point_at_parts(
             ),
         }
 
-    max_points = max(1, min(int(max_points), 10))
-    prompt = _POINTING_PROMPT_TEMPLATE.format(what=description.strip(), n=max_points)
+    max_items = max(1, min(int(max_items), 10))
+    prompt = _POINTING_PROMPT_TEMPLATE.format(what=description.strip(), n=max_items)
 
     try:
         client = _get_genai_client()
@@ -351,15 +309,15 @@ async def point_at_parts(
 
     raw = (response.text or "").strip()
     try:
-        points = json.loads(_strip_json_fence(raw))
+        items = json.loads(_strip_json_fence(raw))
     except json.JSONDecodeError as exc:
         logger.warning("point_at_parts: bad JSON from model: %s; raw=%r", exc, raw[:300])
         return {
             "status": "no_points",
-            "message": "Vision model returned no usable points.",
+            "message": "Vision model returned no usable boxes.",
         }
 
-    if not isinstance(points, list) or not points:
+    if not isinstance(items, list) or not items:
         return {
             "status": "no_points",
             "message": (
@@ -368,40 +326,34 @@ async def point_at_parts(
             ),
         }
 
-    try:
-        img = Image.open(io.BytesIO(frame_bytes)).convert("RGBA")
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("point_at_parts: failed to decode frame: %s", exc)
-        return {
-            "status": "decode_error",
-            "message": "Could not decode the camera frame. Ask the user to try again.",
-        }
-
-    w, h = img.size
-    draw = ImageDraw.Draw(img, "RGBA")
-    try:
-        font = ImageFont.truetype("arial.ttf", max(16, w // 50))
-    except OSError:
-        font = ImageFont.load_default()
-
-    drawn = []
-    for item in points[:max_points]:
-        pt = item.get("point") if isinstance(item, dict) else None
-        if not isinstance(pt, list) or len(pt) != 2:
+    boxes: list[dict[str, Any]] = []
+    for item in items[:max_items]:
+        if not isinstance(item, dict):
+            continue
+        raw_box = item.get("box_2d")
+        if not isinstance(raw_box, list) or len(raw_box) != 4:
             continue
         try:
-            y_norm = float(pt[0])
-            x_norm = float(pt[1])
+            ymin, xmin, ymax, xmax = (float(v) for v in raw_box)
         except (TypeError, ValueError):
             continue
-        # Clamp to 0..1000 then map to pixels
-        cx = int(max(0.0, min(1000.0, x_norm)) / 1000.0 * w)
-        cy = int(max(0.0, min(1000.0, y_norm)) / 1000.0 * h)
+        # Clamp to 0..1000 and skip degenerate/inverted boxes
+        ymin = max(0.0, min(1000.0, ymin))
+        xmin = max(0.0, min(1000.0, xmin))
+        ymax = max(0.0, min(1000.0, ymax))
+        xmax = max(0.0, min(1000.0, xmax))
+        if xmax - xmin < 1.0 or ymax - ymin < 1.0:
+            continue
         label = str(item.get("label", "")).strip()[:40]
-        _draw_point(draw, cx, cy, label, img_w=w, img_h=h, font=font)
-        drawn.append({"label": label, "y": y_norm, "x": x_norm})
+        boxes.append({
+            "label": label,
+            "ymin": ymin,
+            "xmin": xmin,
+            "ymax": ymax,
+            "xmax": xmax,
+        })
 
-    if not drawn:
+    if not boxes:
         return {
             "status": "no_points",
             "message": (
@@ -409,15 +361,10 @@ async def point_at_parts(
                 "user to reposition the camera so the part is visible and try again."
             ),
         }
-
-    buf = io.BytesIO()
-    img.convert("RGB").save(buf, format="PNG", optimize=True)
-    annotation_id = frame_cache.store_annotation(buf.getvalue())
 
     return {
         "status": "ok",
         "focus_part": description,
-        "instruction": drawn[0]["label"] if len(drawn) == 1 else f"{len(drawn)} points",
-        "annotated_image_url": f"/annotations/{annotation_id}.png",
-        "points": drawn,
+        "instruction": boxes[0]["label"] if len(boxes) == 1 else f"{len(boxes)} parts",
+        "boxes": boxes,
     }

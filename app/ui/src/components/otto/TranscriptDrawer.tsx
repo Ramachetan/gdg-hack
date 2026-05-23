@@ -24,6 +24,7 @@ import {
   Gauge,
 } from "lucide-react";
 import type {
+  BoxesMessage,
   ChatMessage,
   GuideMessage,
   ImageMessage,
@@ -90,6 +91,33 @@ function ImageMsg({ msg }: { msg: ImageMessage }) {
         {msg.caption && (
           <div className="px-3 py-2 text-xs text-zinc-300">{msg.caption}</div>
         )}
+      </div>
+    </Message>
+  );
+}
+
+function BoxesMsg({ msg }: { msg: BoxesMessage }) {
+  const count = msg.boxes.length;
+  const heading =
+    msg.focusPart ||
+    `${count} part${count === 1 ? "" : "s"}`;
+  return (
+    <Message from="assistant">
+      <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-zinc-400">
+        <span className="grid h-5 w-5 place-items-center rounded-full bg-primary/15 ring-1 ring-primary/30">
+          <ScanEye className="h-3 w-3 text-primary" />
+        </span>
+        Otto · Pointed at {heading}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {msg.boxes.map((b, i) => (
+          <span
+            key={i}
+            className="rounded-full bg-rose-500/15 px-2.5 py-0.5 text-xs text-rose-200 ring-1 ring-rose-400/30"
+          >
+            {b.label || `#${i + 1}`}
+          </span>
+        ))}
       </div>
     </Message>
   );
@@ -175,6 +203,8 @@ function Bubble({ msg }: { msg: ChatMessage }) {
       return <TextMsg msg={msg} />;
     case "image":
       return <ImageMsg msg={msg} />;
+    case "boxes":
+      return <BoxesMsg msg={msg} />;
     case "guide":
       return <GuideMsg msg={msg} />;
     case "system":

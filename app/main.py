@@ -136,6 +136,24 @@ async def websocket_endpoint(
     # pool so audio chunks keep flowing during a tool call.
     tool_pool = ToolThreadPoolConfig(max_workers=4)
 
+    # Server-side VAD defaults are tuned for clean studio audio and clip real
+    # speech on phone mics: quieter speech doesn't register (LOW start), natural
+    # mid-sentence pauses end the turn early, and a single noise spike (typing,
+    # a cough) fakes a "user speaking" event that interrupts Otto. Bias the
+    # detector toward catching speech and being patient about pauses.
+    realtime_input_config = types.RealtimeInputConfig(
+        automatic_activity_detection=types.AutomaticActivityDetection(
+            start_of_speech_sensitivity=types.StartSensitivity.START_SENSITIVITY_HIGH,
+            end_of_speech_sensitivity=types.EndSensitivity.END_SENSITIVITY_LOW,
+            # Require ~200 ms of sustained speech before committing — kills
+            # false starts from short transient noise.
+            prefix_padding_ms=200,
+            # Wait ~1.2 s of silence before ending the user's turn — gives room
+            # for natural pauses without the user feeling cut off.
+            silence_duration_ms=1200,
+        ),
+    )
+
     if is_native_audio:
         # Native audio models require AUDIO response modality
         # with audio transcription
@@ -151,6 +169,7 @@ async def websocket_endpoint(
             session_resumption=types.SessionResumptionConfig(),
             context_window_compression=compression,
             tool_thread_pool_config=tool_pool,
+            realtime_input_config=realtime_input_config,
             proactivity=(
                 types.ProactivityConfig(proactive_audio=True)
                 if proactivity
@@ -177,6 +196,7 @@ async def websocket_endpoint(
             session_resumption=types.SessionResumptionConfig(),
             context_window_compression=compression,
             tool_thread_pool_config=tool_pool,
+            realtime_input_config=realtime_input_config,
         )
         logger.debug(
             f"Half-cascade model detected: {model_name}, "

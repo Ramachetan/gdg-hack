@@ -163,6 +163,21 @@ body {
   -webkit-backdrop-filter: blur(14px) saturate(140%);
 }
 
+/* point_at_parts bounding-box overlay — short pop-in + soft glow pulse */
+@keyframes otto-box-pop {
+  0%   { transform: scale(1.18); opacity: 0; }
+  60%  { transform: scale(0.98); opacity: 1; }
+  100% { transform: scale(1);    opacity: 1; }
+}
+@keyframes otto-box-glow {
+  0%, 100% { box-shadow: 0 0 0 4px oklch(0.65 0.2 25 / 0.22), 0 0 18px 2px oklch(0.65 0.2 25 / 0.35) inset; }
+  50%      { box-shadow: 0 0 0 6px oklch(0.65 0.2 25 / 0.32), 0 0 24px 4px oklch(0.65 0.2 25 / 0.50) inset; }
+}
+.otto-box {
+  animation: otto-box-pop 320ms cubic-bezier(0.2, 0.9, 0.3, 1.2) both,
+             otto-box-glow 2.2s ease-in-out 320ms infinite;
+}
+
 /* Disable text-selection callouts on mobile touch UI surfaces */
 .otto-no-select {
   -webkit-user-select: none;

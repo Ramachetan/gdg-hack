@@ -20,9 +20,10 @@ import { Drawer } from "@/components/ui/drawer";
 import { useTheme } from "@/lib/theme";
 import { Square, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { ImageMessage } from "@/lib/types";
+import type { BoxesMessage, ImageMessage } from "@/lib/types";
 
 const SPOTLIGHT_MS = 6000;
+const BOXES_MS = 3500;
 
 type Phase = "lobby" | "in-call";
 
@@ -138,10 +139,10 @@ export default function App() {
     [sock.messages],
   );
 
-  // Surface the most recent annotated frame (from point_at_parts or
-  // annotate_frame) as a temporary overlay on top of the live camera — the
-  // chat drawer is collapsed by default, so without this the user never sees
-  // what Otto pointed at.
+  // Surface the most recent annotated frame (from annotate_frame) as a
+  // temporary still overlay on top of the live camera — the chat drawer is
+  // collapsed by default, so without this the user never sees what Otto
+  // pointed at.
   const latestImageMsg = useMemo(() => {
     for (let i = sock.messages.length - 1; i >= 0; i--) {
       const m = sock.messages[i];
@@ -162,6 +163,29 @@ export default function App() {
   }, [latestImageMsg, spotlightId]);
 
   const dismissSpotlight = useCallback(() => setSpotlightVisible(false), []);
+
+  // Boxes from point_at_parts: render labeled boxes over the live camera for a
+  // few seconds, keeping the video playing underneath instead of freezing it.
+  const latestBoxesMsg = useMemo(() => {
+    for (let i = sock.messages.length - 1; i >= 0; i--) {
+      const m = sock.messages[i];
+      if (m.kind === "boxes") return m as BoxesMessage;
+    }
+    return undefined;
+  }, [sock.messages]);
+
+  const [boxesId, setBoxesId] = useState<string | null>(null);
+  const [boxesVisible, setBoxesVisible] = useState(false);
+
+  useEffect(() => {
+    if (!latestBoxesMsg || latestBoxesMsg.id === boxesId) return;
+    setBoxesId(latestBoxesMsg.id);
+    setBoxesVisible(true);
+    const t = window.setTimeout(() => setBoxesVisible(false), BOXES_MS);
+    return () => window.clearTimeout(t);
+  }, [latestBoxesMsg, boxesId]);
+
+  const dismissBoxes = useCallback(() => setBoxesVisible(false), []);
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -230,13 +254,24 @@ export default function App() {
               </div>
             )}
 
-            {/* Spotlight: latest annotated frame from point_at_parts / annotate_frame.
+            {/* Spotlight: latest annotated frame from annotate_frame.
                 Sits above camera, below the bottom dock — tap to dismiss. */}
             {latestImageMsg && camera.looking && (
               <Spotlight
                 msg={latestImageMsg}
                 visible={spotlightVisible && spotlightId === latestImageMsg.id}
                 onDismiss={dismissSpotlight}
+              />
+            )}
+
+            {/* Bounding boxes from point_at_parts — overlaid on the live video
+                so the camera keeps streaming underneath. */}
+            {latestBoxesMsg && camera.looking && (
+              <BoundingBoxOverlay
+                msg={latestBoxesMsg}
+                visible={boxesVisible && boxesId === latestBoxesMsg.id}
+                videoRef={camera.videoRef}
+                onDismiss={dismissBoxes}
               />
             )}
 
@@ -364,6 +399,112 @@ function Spotlight({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+type VisibleRect = { left: number; top: number; width: number; height: number };
+
+function BoundingBoxOverlay({
+  msg,
+  visible,
+  videoRef,
+  onDismiss,
+}: {
+  msg: BoxesMessage;
+  visible: boolean;
+  videoRef: React.RefObject<HTMLVideoElement | null>;
+  onDismiss: () => void;
+}) {
+  const [rect, setRect] = useState<VisibleRect | null>(null);
+
+  // The <video> is rendered with `object-cover`, so the source image is
+  // center-cropped to fill the container. Reproduce that math to know where
+  // the source frame actually lives on screen, then place boxes relative to
+  // that visible rect (Gemini's coords are normalized to the source image).
+  useEffect(() => {
+    if (!visible) return;
+    const video = videoRef.current;
+    if (!video) return;
+
+    const compute = () => {
+      const cw = video.clientWidth;
+      const ch = video.clientHeight;
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+      if (!cw || !ch || !vw || !vh) return;
+      const containerAspect = cw / ch;
+      const videoAspect = vw / vh;
+      let width: number, height: number, left: number, top: number;
+      if (videoAspect > containerAspect) {
+        height = ch;
+        width = ch * videoAspect;
+        left = (cw - width) / 2;
+        top = 0;
+      } else {
+        width = cw;
+        height = cw / videoAspect;
+        left = 0;
+        top = (ch - height) / 2;
+      }
+      setRect({ left, top, width, height });
+    };
+
+    compute();
+    const ro = new ResizeObserver(compute);
+    ro.observe(video);
+    return () => ro.disconnect();
+  }, [visible, videoRef]);
+
+  return (
+    <div
+      className={cn(
+        "absolute inset-0 z-20 overflow-hidden transition-opacity duration-300",
+        visible ? "opacity-100" : "opacity-0 pointer-events-none",
+      )}
+      aria-hidden={!visible}
+      onClick={onDismiss}
+    >
+      {rect &&
+        msg.boxes.map((b, i) => {
+          const left = rect.left + (b.xmin / 1000) * rect.width;
+          const top = rect.top + (b.ymin / 1000) * rect.height;
+          const width = ((b.xmax - b.xmin) / 1000) * rect.width;
+          const height = ((b.ymax - b.ymin) / 1000) * rect.height;
+          // Label above the box if there's room, else just inside the top.
+          const labelBelow = top < 28;
+          return (
+            <div
+              key={`${msg.id}-${i}`}
+              className="absolute pointer-events-none"
+              style={{ left, top, width, height }}
+            >
+              <div className="otto-box absolute inset-0 rounded-md ring-2 ring-rose-400/95" />
+              {b.label && (
+                <div
+                  className={cn(
+                    "absolute left-0 max-w-[18rem] truncate rounded-md bg-rose-500/95 px-2 py-0.5 text-[11px] font-medium text-white ring-1 ring-rose-300/40 shadow-md",
+                    labelBelow ? "top-1" : "-top-7",
+                  )}
+                >
+                  {b.label}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onDismiss();
+        }}
+        aria-label="Dismiss annotation"
+        className="pointer-events-auto absolute right-3 top-3 z-30 grid h-9 w-9 place-items-center rounded-full bg-black/45 text-white ring-1 ring-white/20 backdrop-blur hover:bg-black/65 active:scale-95 transition"
+        style={{ top: "calc(env(safe-area-inset-top, 0px) + 0.75rem)" }}
+      >
+        <X className="h-4 w-4" />
+      </button>
     </div>
   );
 }
