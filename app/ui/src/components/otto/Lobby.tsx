@@ -105,10 +105,12 @@ export function Lobby({ connection, onStartCall, starting, permError }: Props) {
             </Button>
           </div>
 
-          <div className="mt-6 inline-flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
-            <span className={cn("h-1.5 w-1.5 rounded-full", STATE_DOT[connection])} />
-            {STATE_LABEL[connection]}
-          </div>
+          {connection !== "connected" && (
+            <div className="mt-6 inline-flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">
+              <span className={cn("h-1.5 w-1.5 rounded-full", STATE_DOT[connection])} />
+              {STATE_LABEL[connection]}
+            </div>
+          )}
         </div>
 
         {permError && (

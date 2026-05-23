@@ -2,7 +2,7 @@
 
 > Point your phone at anything broken. Otto sees what you see, hears what you say, and walks you through the fix in real time.
 
-**Build With AI Hackathon submission — Category: Live Agents (Real-time Interaction, Audio + Vision).**
+A submission for the **Build With AI Hackathon** under the *Live Agents* category — real-time, audio + vision, voice-first.
 
 ---
 
@@ -22,26 +22,23 @@ Otto is a calm, look-over-your-shoulder repair co-pilot:
 
 - **Sees** your camera feed continuously and identifies what device you're working on.
 - **Hears** you talk naturally — can be interrupted, asks clarifying questions, never repeats itself.
-- **Grounds** every procedural claim in iFixit's library of millions of step-by-step repair guides spanning phones, laptops, tablets, consoles, appliances, cars, bikes, and more.
+- **Grounds** every procedural claim in iFixit's library of step-by-step repair guides spanning phones, laptops, tablets, consoles, appliances, cars, bikes, and more.
 - **Points** at the exact screw, port, terminal, or cable on *your own camera frame* using Gemini 2.5's spatial grounding — not vague verbal directions.
 - **Warns** you before you touch anything risky (exposed battery terminals, capacitors, hot surfaces, mains AC) and tells you to stop and find a pro when a fix is genuinely out of scope.
 
-## How It Hits the Judging Criteria
+## What Makes It Different
 
-### Innovation & Multimodal UX (40%)
-- No text box. Conversation is voice-first, vision-grounded, and continuously streaming — Otto sees and hears at the same time you do.
-- When the user needs to look at a specific part, Otto draws a labeled dot on their **actual live camera frame** (via the `point_at_parts` tool) rather than describing a location in words.
-- Native-audio model means barge-in / interruption works naturally and the agent's tone adapts to the user.
+- **No text box.** The interaction is voice-first and vision-grounded — audio and frames stream continuously, both directions, with native barge-in.
+- **It points at *your* frame.** When you need to look at a specific part, Otto draws labeled boxes on the live camera feed via the `point_at_parts` tool, instead of describing a location in words.
+- **Every claim is grounded.** Procedural answers trace to an iFixit guide; part call-outs trace to the live camera frame. No invented damage, no hallucinated parts.
+- **Safety is proactive.** Otto warns you *before* you touch anything risky, and bows out when a fix is beyond a comfortable home-repair scope.
 
-### Technical Implementation (30%)
-- Built on **Google ADK** (`google.adk.agents.Agent`, `Runner`, `LiveRequestQueue`) and **Gemini Live API** (`gemini-live-2.5-flash-native-audio`).
+## Under the Hood
+
+- Built on **Google ADK** (`google.adk.agents.Agent`, `Runner`, `LiveRequestQueue`) and the **Gemini Live API** (`gemini-live-2.5-flash-native-audio`).
 - Spatial grounding uses **Gemini 2.5 Flash** in a separate one-shot vision call (the cookbook-recommended approach for precise pointing).
-- Sliding-window context compression (100k → 80k tokens) lifts the Live API's session cap so a single repair session can run as long as it needs.
+- A sliding-window context compressor (100k → 80k tokens) extends the Live API's session cap so a single repair can run as long as it needs.
 - Tools run on a worker pool (`ToolThreadPoolConfig`) so iFixit lookups and PIL image annotation don't block the audio stream.
-- All factual claims are grounded — every procedural answer traces to an iFixit guide, every part callout traces to the live camera frame. No hallucinated damage, no invented parts.
-
-### Demo & Presentation (30%)
-- Real working software, deployed to Cloud Run, with an architecture diagram and a video showing the end-to-end flow against an actual broken device.
 
 ## Architecture
 
@@ -149,4 +146,3 @@ The script enables required APIs, builds via Cloud Build, and rolls out a Cloud 
 - iFixit public API — https://www.ifixit.com/api/2.0/doc
 - Google ADK docs — https://google.github.io/adk-docs/
 - Gemini Live API — https://ai.google.dev/gemini-api/docs/live
-- Hackathon portal — https://goo.gle/CHM-hack-26

@@ -331,3 +331,16 @@ async def websocket_endpoint(
         # Always close the queue, even if exceptions occurred
         logger.debug("Closing live_request_queue")
         live_request_queue.close()
+
+        # Drop the ADK session so the next connection — even with the same
+        # session_id from an auto-reconnect or a replayed URL — starts fresh
+        # instead of resuming the prior conversation.
+        try:
+            await session_service.delete_session(
+                app_name=APP_NAME, user_id=user_id, session_id=session_id
+            )
+            logger.debug(
+                f"Deleted session on disconnect: user_id={user_id}, session_id={session_id}"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to delete session on disconnect: {e}")
