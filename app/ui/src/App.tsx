@@ -18,8 +18,11 @@ import { TextInputBar } from "@/components/otto/TextInputBar";
 import { TranscriptDrawerContent, TranscriptHandle } from "@/components/otto/TranscriptDrawer";
 import { Drawer } from "@/components/ui/drawer";
 import { useTheme } from "@/lib/theme";
-import { Square } from "lucide-react";
+import { Square, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { ImageMessage } from "@/lib/types";
+
+const SPOTLIGHT_MS = 6000;
 
 type Phase = "lobby" | "in-call";
 
@@ -135,6 +138,31 @@ export default function App() {
     [sock.messages],
   );
 
+  // Surface the most recent annotated frame (from point_at_parts or
+  // annotate_frame) as a temporary overlay on top of the live camera — the
+  // chat drawer is collapsed by default, so without this the user never sees
+  // what Otto pointed at.
+  const latestImageMsg = useMemo(() => {
+    for (let i = sock.messages.length - 1; i >= 0; i--) {
+      const m = sock.messages[i];
+      if (m.kind === "image") return m as ImageMessage;
+    }
+    return undefined;
+  }, [sock.messages]);
+
+  const [spotlightId, setSpotlightId] = useState<string | null>(null);
+  const [spotlightVisible, setSpotlightVisible] = useState(false);
+
+  useEffect(() => {
+    if (!latestImageMsg || latestImageMsg.id === spotlightId) return;
+    setSpotlightId(latestImageMsg.id);
+    setSpotlightVisible(true);
+    const t = window.setTimeout(() => setSpotlightVisible(false), SPOTLIGHT_MS);
+    return () => window.clearTimeout(t);
+  }, [latestImageMsg, spotlightId]);
+
+  const dismissSpotlight = useCallback(() => setSpotlightVisible(false), []);
+
   return (
     <TooltipProvider delayDuration={300}>
       <div className="relative h-[100dvh] w-full overflow-hidden text-foreground">
@@ -200,6 +228,16 @@ export default function App() {
                   size={224}
                 />
               </div>
+            )}
+
+            {/* Spotlight: latest annotated frame from point_at_parts / annotate_frame.
+                Sits above camera, below the bottom dock — tap to dismiss. */}
+            {latestImageMsg && camera.looking && (
+              <Spotlight
+                msg={latestImageMsg}
+                visible={spotlightVisible && spotlightId === latestImageMsg.id}
+                onDismiss={dismissSpotlight}
+              />
             )}
 
             {/* Floating "Tap to interrupt" pill — only while Otto is speaking/thinking. */}
@@ -284,6 +322,51 @@ const OTTO_DOT: Record<OttoState, string> = {
   speaking: "bg-primary otto-pulse",
   connecting: "bg-zinc-400 otto-pulse",
 };
+
+function Spotlight({
+  msg,
+  visible,
+  onDismiss,
+}: {
+  msg: ImageMessage;
+  visible: boolean;
+  onDismiss: () => void;
+}) {
+  const label = msg.caption || msg.focusPart;
+  return (
+    <div
+      className={cn(
+        "absolute inset-0 z-20 transition-opacity duration-300",
+        visible ? "opacity-100" : "opacity-0 pointer-events-none",
+      )}
+      aria-hidden={!visible}
+    >
+      <img
+        src={msg.url}
+        alt={msg.focusPart || "annotated frame"}
+        className="absolute inset-0 h-full w-full object-cover"
+      />
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="Dismiss annotation"
+        className="absolute right-3 top-3 z-30 grid h-9 w-9 place-items-center rounded-full bg-black/55 text-white ring-1 ring-white/20 backdrop-blur hover:bg-black/75 active:scale-95 transition"
+      >
+        <X className="h-4 w-4" />
+      </button>
+      {label && (
+        <div
+          className="pointer-events-none absolute inset-x-0 z-20 flex justify-center px-4"
+          style={{ bottom: "calc(env(safe-area-inset-bottom, 0px) + 14rem)" }}
+        >
+          <div className="max-w-md rounded-2xl bg-black/70 px-4 py-2 text-center text-sm font-medium text-white shadow-lg ring-1 ring-white/15 backdrop-blur">
+            {label}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function InterruptPill({
   visible,
