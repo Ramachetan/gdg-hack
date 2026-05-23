@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { ScanEye, Settings2, Terminal, Moon, Sun, RotateCcw } from "lucide-react";
+import { Settings2, Terminal, Moon, Sun, RotateCcw } from "lucide-react";
 import type { ConnectionState } from "@/lib/types";
 import type { Theme } from "@/lib/theme";
 
@@ -30,7 +30,7 @@ type Props = {
 };
 
 const DOT_CLASS: Record<ConnectionState, string> = {
-  connected: "hidden",
+  connected: "bg-emerald-400",
   connecting: "bg-amber-400",
   disconnected: "bg-rose-400",
 };
@@ -58,39 +58,28 @@ export function TopBar({
   return (
     <header
       className={cn(
-        "absolute inset-x-0 top-0 z-30 flex items-center justify-between gap-2 px-3 pb-3",
+        "absolute inset-x-0 top-0 z-30 flex items-center justify-between gap-2 px-4 pb-3",
         "text-zinc-900 dark:text-zinc-50",
-        // Lobby: theme-aware faint gradient
-        compact && "bg-gradient-to-b from-zinc-50/30 to-transparent dark:from-black/40 dark:via-black/15 backdrop-blur-[2px]",
-        // In-call: always darker gradient regardless of theme
+        // In-call: darker gradient so controls read against camera/backdrop
         inCall && "bg-gradient-to-b from-black/40 via-black/15 to-transparent backdrop-blur-[6px] text-zinc-50",
+        // Default (not lobby, not in-call): light gradient
         !compact && !inCall && "bg-gradient-to-b from-zinc-50/40 to-transparent dark:from-black/40 dark:via-black/15 backdrop-blur-[6px]",
+        // Lobby (compact): no backdrop — Lobby provides its own
       )}
       style={{ paddingTop: "calc(env(safe-area-inset-top, 0px) + 0.75rem)" }}
     >
-      <div className="flex items-center gap-2.5 min-w-0">
-        <div className="relative">
-          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-primary/95 to-primary/65 ring-1 ring-white/15 shadow-[0_8px_22px_-8px_oklch(0.68_0.22_28_/_0.6)]">
-            <ScanEye className="h-4 w-4 text-primary-foreground" />
-          </div>
-          <span
-            className={cn(
-              "absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full ring-2",
-              inCall ? "ring-zinc-950" : "ring-white dark:ring-zinc-950",
-              DOT_CLASS[connection],
-            )}
-            aria-label={`Status: ${connection}`}
-          />
-        </div>
-        <div className="min-w-0">
-          <div className="text-[15px] font-semibold leading-none tracking-tight">Otto</div>
-          <div className={cn(
-            "text-[10px] mt-1 uppercase tracking-[0.16em]",
-            inCall ? "text-zinc-400" : "text-zinc-500 dark:text-zinc-400",
-          )}>
-            Live repair co-pilot
-          </div>
-        </div>
+      <div className="flex items-center gap-2 min-w-0">
+        {!compact && (
+          <>
+            <span
+              className={cn("h-1.5 w-1.5 rounded-full", DOT_CLASS[connection])}
+              aria-label={`Status: ${connection}`}
+            />
+            <div className="text-[13px] font-medium tracking-tight otto-no-select">
+              Otto
+            </div>
+          </>
+        )}
       </div>
 
       <div className="flex items-center gap-1.5">

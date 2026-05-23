@@ -8,7 +8,7 @@ import {
 import { Mic, MicOff, Video, VideoOff, PhoneOff } from "lucide-react";
 
 type Props = {
-  audioOn: boolean;
+  micOn: boolean;
   looking: boolean;
   onToggleAudio: () => void;
   onToggleLook: () => void;
@@ -17,7 +17,7 @@ type Props = {
 };
 
 export function CallControls({
-  audioOn,
+  micOn,
   looking,
   onToggleAudio,
   onToggleLook,
@@ -32,8 +32,8 @@ export function CallControls({
       )}
     >
       <CallButton
-        active={audioOn}
-        label={audioOn ? "Mute" : "Unmute"}
+        active={micOn}
+        label={micOn ? "Mute" : "Unmute"}
         onClick={onToggleAudio}
         activeIcon={<Mic className="h-6 w-6" />}
         inactiveIcon={<MicOff className="h-6 w-6" />}

@@ -96,16 +96,16 @@ export default function App() {
   }, [audio, sock]);
 
   const toggleAudio = useCallback(async () => {
-    if (audio.audioOn) {
-      audio.stop();
-      toast("Mic muted");
-    } else {
-      try {
-        await audio.start();
+    try {
+      if (audio.micOn) {
+        await audio.setMicEnabled(false);
+        toast("Mic muted — Otto can still talk");
+      } else {
+        await audio.setMicEnabled(true);
         toast.success("Mic on");
-      } catch (err) {
-        toast.error(`Mic error: ${err instanceof Error ? err.message : String(err)}`);
       }
+    } catch (err) {
+      toast.error(`Mic error: ${err instanceof Error ? err.message : String(err)}`);
     }
   }, [audio]);
 
@@ -121,7 +121,7 @@ export default function App() {
 
   const ottoState = useDerivedOttoState({
     connection: sock.connection,
-    audioOn: audio.audioOn,
+    micOn: audio.micOn,
     inputLevel: audio.inputLevel,
     outputLevel: audio.outputLevel,
     hasPendingAgent: useMemo(
@@ -272,7 +272,7 @@ export default function App() {
               />
 
               <CallControls
-                audioOn={audio.audioOn}
+                micOn={audio.micOn}
                 looking={camera.looking}
                 onToggleAudio={toggleAudio}
                 onToggleLook={toggleLook}
@@ -438,13 +438,13 @@ function OttoBadge({
 // --- Derive Otto's current "presence" state for the orb + status pill.
 function useDerivedOttoState({
   connection,
-  audioOn,
+  micOn,
   inputLevel,
   outputLevel,
   hasPendingAgent,
 }: {
   connection: "connecting" | "connected" | "disconnected";
-  audioOn: boolean;
+  micOn: boolean;
   inputLevel: React.MutableRefObject<number>;
   outputLevel: React.MutableRefObject<number>;
   hasPendingAgent: boolean;
@@ -465,6 +465,6 @@ function useDerivedOttoState({
 
   if (out > 0.05) return "speaking";
   if (hasPendingAgent) return "thinking";
-  if (audioOn && inp > 0.035) return "listening";
+  if (micOn && inp > 0.035) return "listening";
   return "idle";
 }
